@@ -196,14 +196,14 @@ def register():
 @app.route('/api/add-company', methods=['POST'])
 def add_company():
     content = request.get_json()
+    company_tools_id = content.get('company_tools_id')
     company_name = content.get('company_name')
     company_email = content.get('company_email')
     attached_users = content.get('attached_users')
 
-    admin_users = USER_COLLECTION.find({"user_role": "admin"})
+    if len(attached_users[0]) < 1:
+        attached_users.clear()
 
-    for user in admin_users:
-        attached_users.append(user["user_email"])
 
     # Check if the email already exists in the database
     if COMPANIES_COLLECTION.find_one({'company_email': company_email}):
@@ -214,6 +214,7 @@ def add_company():
     # Create a new user document in the database
     new_company = {
         '_id': company_id.lower(),
+        'company_tools_id': company_tools_id,
         'company_name': company_name,
         'company_email': company_email,
         'attached_users': attached_users
@@ -358,14 +359,14 @@ def get_company_list():
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
         user_id = payload['user_id']
-        user = USER_COLLECTION.find_one({"_id": user_id})
-        companies_obj = COMPANIES_COLLECTION.find()
 
-        for company_obj in companies_obj:
-            company = COMPANIES_COLLECTION.find_one({"_id":company_obj["_id"]})
-            print(company)
-            if company: 
-                company_collection = DB_CLIENT[f'{company_obj["_id"]}_data']
+        user = USER_COLLECTION.find_one({'_id': user_id})
+        companies_arr = user['companies']
+
+        for id in companies_arr:
+            company = COMPANIES_COLLECTION.find_one({"_id": id.lower()})
+            if company:
+                company_collection = DB_CLIENT[f'{id}_data']
                 journey_count, people_count = get_counts(company_collection)
 
                 companies.append({
