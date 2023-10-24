@@ -364,7 +364,8 @@ def get_company_list():
         companies_arr = user['companies']
 
         for id in companies_arr:
-            company = COMPANIES_COLLECTION.find_one({"_id": id.lower()})
+            id = id.lower()
+            company = COMPANIES_COLLECTION.find_one({"_id": id})
             if company:
                 company_collection = DB_CLIENT[f'{id}_data']
                 journey_count, people_count = get_counts(company_collection)
@@ -417,15 +418,9 @@ def get_users():
     start_date = data.get('start-date')
     end_date = data.get('end-date')
     page = data.get('page')
-    search = data.get('search', '')
+    search = data.get('search')
     filters = data.get('column_filter')
     sorting = data.get('sorting')
-
-    print(sorting)
-
-    for filter in filters:
-        print(filter["id"])
-        print(filter["value"])
     
     collection = DB_CLIENT[f'{company_id}_data']
 
@@ -433,10 +428,9 @@ def get_users():
 
     date_range_query = get_date_query(start_date,end_date)
 
-    skip = page * ITEMS_PER_PAGE 
-
+    skip = page * ITEMS_PER_PAGE
     
-    if search:
+    if search != 'false':
         regex_search = re.compile(search.lower(), re.IGNORECASE)
         instance = collection.find({
             '$and': [
@@ -476,9 +470,6 @@ def get_users():
         'users': json.loads(json_util.dumps(list(instance))),
         'total_users': total_users
     }
-
-    print('done')
-
     return jsonify(response_data)
 
 
