@@ -471,20 +471,10 @@ def get_users():
                 filter_query  # Include filter conditions
             ]
         }).skip(skip).limit(ITEMS_PER_PAGE)
-        total_users = collection.count_documents({
-            '$and': [
-                {'fullName': {"$regex": regex_search}},
-                date_range_query,
-                filter_query  # Include filter conditions
-            ]
-        })
     else:
         instance = collection.find({
             '$and': [date_range_query, filter_query]  # Include filter conditions
         }).skip(skip).limit(ITEMS_PER_PAGE)
-        total_users = collection.count_documents({
-            '$and': [date_range_query, filter_query]  # Include filter conditions
-        })
 
     # Apply sorting if provided
     if sorting:
@@ -500,7 +490,6 @@ def get_users():
 
     response_data = {
         'users': json.loads(json_util.dumps(list(instance))),
-        'total_users': total_users
     }
     return jsonify(response_data)
 
