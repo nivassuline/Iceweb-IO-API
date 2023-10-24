@@ -13,6 +13,7 @@ import uuid
 import jwt
 import csv
 import re
+import threading
 
 
 
@@ -32,6 +33,10 @@ DESIRED_COLUNMS_ORDER = ["date","hour","fullName","firstName","lastName","url","
 ITEMS_PER_PAGE = 13
 
 
+
+
+def insert_chunk(collection, records):
+    collection.insert_many(records)
 
 def generate_jwt_token(user_id,user_role):
     # Define the payload of the token (typically contains user-related data)
@@ -291,6 +296,33 @@ def import_data():
     list_of_lists = df_filtered.to_dict(orient='records')
     company_collection.insert_many(list_of_lists)
 
+    chunk_size = 100
+    num_threads = 4
+    l = len(df_filtered)
+    i = 0
+    threads = []
+
+
+    while i < l:
+        chunk = df_filtered.iloc[i:i+chunk_size]
+        records = chunk.to_dict('records')
+        
+        if len(threads) >= num_threads:
+            # Wait for running threads to complete
+            for thread in threads:
+                thread.join()
+            threads = []
+
+        thread = threading.Thread(target=insert_chunk, args=(company_collection, records))
+        thread.start()
+        threads.append(thread)
+        
+        i += chunk_size
+        print(i)
+
+    # Wait for any remaining threads to complete
+    for thread in threads:
+        thread.join()
 
     return jsonify('Done!')
 
