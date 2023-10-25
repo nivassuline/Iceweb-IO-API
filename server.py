@@ -9,6 +9,7 @@ import pandas as pd
 from flask_cors import CORS
 import random
 import json
+import hashlib
 import uuid
 import jwt
 import csv
@@ -22,18 +23,28 @@ CORS(app)
 bcrypt = Bcrypt(app)
 
 
-DB_CONNECTOR = MongoClient("mongodb://icewebniv:G3ccZpGQXvs6mVdsYuTCEfk3EuDKTdASUsNyEi6HCFoFp7Af3ESn0asd80pDRIP1w51FILE3QvdYACDbYY0n4g==@icewebniv.mongo.cosmos.azure.com:10255/?ssl=true&retrywrites=false&replicaSet=globaldb&maxIdleTimeMS=120000&appName=@icewebniv@")
+# DB_CONNECTOR = MongoClient("mongodb://icewebniv:G3ccZpGQXvs6mVdsYuTCEfk3EuDKTdASUsNyEi6HCFoFp7Af3ESn0asd80pDRIP1w51FILE3QvdYACDbYY0n4g==@icewebniv.mongo.cosmos.azure.com:10255/?ssl=true&retrywrites=false&replicaSet=globaldb&maxIdleTimeMS=120000&appName=@icewebniv@")
+DB_CONNECTOR = MongoClient("mongodb://icwebio:yJtwZocIwp8tZ4CQGAnRVvBxCv2i3bGIDHa3Za7w6sP3ww5I5Bgm8e1OpSSMbvdLIpEh7KDeWX4WACDbtUkLGw==@icwebio.mongo.cosmos.azure.com:10255/?ssl=true&replicaSet=globaldb&retrywrites=false&maxIdleTimeMS=120000&appName=@icwebio@")
 DB_CLIENT = DB_CONNECTOR['main']
+ADMIN_DB = DB_CONNECTOR
+DB_CLIENT.command("enableSharding", "main")
 COMPANIES_COLLECTION = DB_CLIENT['companies']
 USER_COLLECTION = DB_CLIENT['users']
 ROLE_COLLECTION = DB_CLIENT['roles']
 SECRET_KEY = 'iceweb123456789'
 
-DESIRED_COLUNMS_ORDER = ["date","hour","fullName","firstName","lastName","url","facebook","linkedIn","twitter","email","optIn","optInDate","optInIp","optInUrl","pixelFirstHitDate","pixelLastHitDate","bebacks","phone","dnc","age","gender","maritalStatus","address","city","state","zip","householdIncome","netWorth","incomeLevels","peopleInHousehold","adultsInHousehold","childrenInHousehold","veteransInHousehold","education","creditRange","ethnicGroup","generation","homeOwner","occupationDetail","politicalParty","religion","childrenBetweenAges0_3","childrenBetweenAges4_6","childrenBetweenAges7_9","childrenBetweenAges10_12","childrenBetweenAges13_18","behaviors","childrenAgeRanges","interests","ownsAmexCard","ownsBankCard","dwellingType","homeHeatType","homePrice","homePurchasedYearsAgo","homeValue","householdNetWorth","language","mortgageAge","mortgageAmount","mortgageLoanType","mortgageRefinanceAge","mortgageRefinanceAmount","mortgageRefinanceType","isMultilingual","newCreditOfferedHousehold","numberOfVehiclesInHousehold","ownsInvestment","ownsPremiumAmexCard","ownsPremiumCard","ownsStocksAndBonds","personality","isPoliticalContributor","isVoter","premiumIncomeHousehold","urbanicity","maid","maidOs"]
+DESIRED_COLUNMS_ORDER = ["date","id","hour","fullName","firstName","lastName","url","facebook","linkedIn","twitter","email","optIn","optInDate","optInIp","optInUrl","pixelFirstHitDate","pixelLastHitDate","bebacks","phone","dnc","age","gender","maritalStatus","address","city","state","zip","householdIncome","netWorth","incomeLevels","peopleInHousehold","adultsInHousehold","childrenInHousehold","veteransInHousehold","education","creditRange","ethnicGroup","generation","homeOwner","occupationDetail","politicalParty","religion","childrenBetweenAges0_3","childrenBetweenAges4_6","childrenBetweenAges7_9","childrenBetweenAges10_12","childrenBetweenAges13_18","behaviors","childrenAgeRanges","interests","ownsAmexCard","ownsBankCard","dwellingType","homeHeatType","homePrice","homePurchasedYearsAgo","homeValue","householdNetWorth","language","mortgageAge","mortgageAmount","mortgageLoanType","mortgageRefinanceAge","mortgageRefinanceAmount","mortgageRefinanceType","isMultilingual","newCreditOfferedHousehold","numberOfVehiclesInHousehold","ownsInvestment","ownsPremiumAmexCard","ownsPremiumCard","ownsStocksAndBonds","personality","isPoliticalContributor","isVoter","premiumIncomeHousehold","urbanicity","maid","maidOs"]
 ITEMS_PER_PAGE = 13
 
 
 
+
+
+def generate_hashed_id(row):
+    # Convert the row to a string and generate a unique hash
+    row_string = str(row)
+    hashed_id = hashlib.sha1(row_string.encode()).hexdigest()
+    return hashed_id
 
 def insert_chunk(collection, records):
     collection.insert_many(records)
@@ -85,11 +96,53 @@ def get_most_popular(collection,date_range_query):
 
 def get_counts(collection,date_range_query = None):
     if date_range_query:
+        pipeline = [
+        {
+            "$match": date_range_query
+        },
+        {
+            "$group": {
+                "_id": "$fullName"
+            }
+        },
+        {
+            "$count": "total_distinct_count"
+        }
+        ]
+        result = list(collection.aggregate(pipeline))
         journey_count = collection.count_documents(date_range_query)
-        people_count = len(collection.distinct("fullName", date_range_query))
+        try:
+            people_count = result[0]["total_distinct_count"]
+        except IndexError:
+            people_count = 0
     else:
-        journey_count = collection.count_documents({})
-        people_count = len(collection.distinct("fullName", ))
+        pipeline_people = [
+            {
+                "$group": {
+                    "_id": "$fullName"
+                }
+            },
+            {
+                "$count": "total_distinct_count"
+            }
+        ]
+        pipeline_journey = [
+        {
+        "$group": {
+            "_id": None,
+            "count": {"$sum": 1}
+        }
+        }
+        ]
+
+        result_people = list(collection.aggregate(pipeline_people))
+        result_journey = list(collection.aggregate(pipeline_journey))
+        try:
+            people_count = result_people[0]["total_distinct_count"]
+            journey_count = result_journey[0]["count"]
+        except IndexError:
+            people_count = 0
+            journey_count = 0
 
     return journey_count , people_count
 
@@ -245,6 +298,7 @@ def add_data():
     df[['hour']] = df['hour'].str.split('+', expand=True)[[0]]
     df['fullName'] = df['firstName'] + ' ' + df['lastName']
 
+
     list_of_lists = df.to_dict(orient='records')
     company_collection.insert_many(list_of_lists)
 
@@ -281,7 +335,7 @@ def delete_company():
 def import_data():
     company_id = request.args.get('id')
     company_collection = DB_CLIENT[f'{company_id}_data']
-    path = '/Users/neevassouline/Desktop/Coding Projects/IcewebIO/backend/IBD_all.csv'
+    path = '/Users/neevassouline/Desktop/Coding Projects/IcewebIO/backend/IBD_S.csv'
 
     df = pd.read_csv(path)
     df.fillna('-', inplace=True)
@@ -293,15 +347,25 @@ def import_data():
 
     # Rearrange columns in the desired order
     df_filtered = df[DESIRED_COLUNMS_ORDER]
-    list_of_lists = df_filtered.to_dict(orient='records')
-    company_collection.insert_many(list_of_lists)
+    # df_filtered['hashed_id'] = df_filtered.apply(generate_hashed_id, axis=1)
+
+    # list_of_lists = df_filtered.to_dict(orient='records')
+    # company_collection.insert_many(list_of_lists)
+    admin_db = DB_CONNECTOR['admin']
+
+    try:
+        shard_key = {"id": "hashed"}  
+        admin_db.command("enableSharding", "main")
+        admin_db.command("shardCollection", f"main.{company_id}_data", key=shard_key)
+    except Exception:
+        print('asd')
+
 
     chunk_size = 100
     num_threads = 4
     l = len(df_filtered)
     i = 0
     threads = []
-
 
     while i < l:
         chunk = df_filtered.iloc[i:i+chunk_size]
@@ -318,7 +382,6 @@ def import_data():
         threads.append(thread)
         
         i += chunk_size
-        print(i)
 
     # Wait for any remaining threads to complete
     for thread in threads:
@@ -346,9 +409,8 @@ def get_user_details():
     except jwt.DecodeError as e:
         return jsonify({"error": "Invalid token"}), 401
 
-
-@app.route("/api/get-dashboard-details", methods=['POST'])
-def get_dashboard_details():
+@app.route("/api/get-company-counts", methods=['POST'])
+def get_company_counts():
     token = request.headers.get('Authorization')
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
@@ -363,14 +425,43 @@ def get_dashboard_details():
 
         date_range_query = get_date_query(start_date,end_date)
 
-        journey_count, people_count = get_counts(company_collection,date_range_query)
-
-        popular_urls, urls_counts = get_most_popular(company_collection,date_range_query)
-        
+        journey_count, people_count = get_counts(company_collection,date_range_query)        
+        print(journey_count)
+        print(people_count)
         
         response = {
             'people_count': people_count,
             'journey_count': journey_count,
+        }
+
+
+        return jsonify(response), 200
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Token has expired"}), 401
+    except jwt.DecodeError as e:
+        print(e)
+        return jsonify({"error": "Invalid token"}), 401
+
+
+@app.route("/api/get-company-popular", methods=['POST'])
+def get_company_popular():
+    token = request.headers.get('Authorization')
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+
+        user_id = payload['user_id']
+
+        company_id = request.json.get('company_id')
+        start_date = request.json.get('start_date')
+        end_date = request.json.get('end_date')
+
+        company_collection = DB_CLIENT[f'{company_id}_data']
+
+        date_range_query = get_date_query(start_date,end_date)
+
+        popular_urls, urls_counts = get_most_popular(company_collection,date_range_query)
+
+        response = {
             'popular_urls': popular_urls,
             'popular_urls_counts': urls_counts
         }
@@ -382,7 +473,6 @@ def get_dashboard_details():
     except jwt.DecodeError as e:
         print(e)
         return jsonify({"error": "Invalid token"}), 401
-    
 
 @app.route("/api/get-company-list", methods=['POST'])
 def get_company_list():
@@ -594,3 +684,7 @@ def download_users():
 def internal_error(error):
 
     return jsonify("Not Found")
+
+
+if __name__ == '__main__':
+    app.run(port='8080')
