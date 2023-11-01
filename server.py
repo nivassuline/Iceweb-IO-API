@@ -31,6 +31,7 @@ DB_CLIENT.command("enableSharding", "main")
 COMPANIES_COLLECTION = DB_CLIENT['companies']
 USER_COLLECTION = DB_CLIENT['users']
 ROLE_COLLECTION = DB_CLIENT['roles']
+SEGMENT_COLLECTION = DB_CLIENT['segments']
 SECRET_KEY = 'iceweb123456789'
 
 DESIRED_COLUNMS_ORDER = ["date","id","hour","fullName","firstName","lastName","url","facebook","linkedIn","twitter","email","optIn","optInDate","optInIp","optInUrl","pixelFirstHitDate","pixelLastHitDate","bebacks","phone","dnc","age","gender","maritalStatus","address","city","state","zip","householdIncome","netWorth","incomeLevels","peopleInHousehold","adultsInHousehold","childrenInHousehold","veteransInHousehold","education","creditRange","ethnicGroup","generation","homeOwner","occupationDetail","politicalParty","religion","childrenBetweenAges0_3","childrenBetweenAges4_6","childrenBetweenAges7_9","childrenBetweenAges10_12","childrenBetweenAges13_18","behaviors","childrenAgeRanges","interests","ownsAmexCard","ownsBankCard","dwellingType","homeHeatType","homePrice","homePurchasedYearsAgo","homeValue","householdNetWorth","language","mortgageAge","mortgageAmount","mortgageLoanType","mortgageRefinanceAge","mortgageRefinanceAmount","mortgageRefinanceType","isMultilingual","newCreditOfferedHousehold","numberOfVehiclesInHousehold","ownsInvestment","ownsPremiumAmexCard","ownsPremiumCard","ownsStocksAndBonds","personality","isPoliticalContributor","isVoter","premiumIncomeHousehold","urbanicity","maid","maidOs"]
@@ -179,17 +180,46 @@ def get_date_query(start_date, end_date,search=None):
     return date_range_query
 
 
-def build_filter(filter_params):
+def build_filter(filter_params=None, column_filters=None):
     filters = []
+    if filter_params:
+        for filter in filter_params:
+            print(f'{filter} asd')
+            filter_key = filter["id"]
+            filter_value = filter["value"]
+            if filter_key == 'range':
+                column_name = filter_value['name']
+                min_val = int(filter_value['minVal'])
+                max_val = int(filter_value['maxVal'])
 
-    for filter in filter_params:
-        filter_key = filter["id"]
-        filter_value = filter["value"]
+                filters.append({column_name: {'$gte': min_val, '$lte': max_val }})
+            elif filter_key == 'contains':
+                column_name = filter_value['name']
+                value = filter_value['value']
 
-        filters.append({filter_key: {"$regex": filter_value, "$options": 'i'}})
+                filters.append({column_name: {"$regex": value, "$options": 'i'}})
+
+            elif filter_key == 'checkbox':
+                column_name = filter_value['name']
+                value_arr = filter_value['value']
+                or_arr = []
+
+                for value in value_arr:
+                    value = re.escape(value)
+                    or_arr.append({column_name: {'$regex': value}})
+                
+                filters.append({'$or': or_arr})
+                
+    if column_filters:
+        for filter in column_filters:
+            print(filter)
+            filter_key = filter["id"]
+            filter_value = filter["value"]
+            filters.append({filter_key: {"$regex": filter_value, "$options": 'i'}})
+
+
 
     # Combine filters using '$and' for multiple filters
-
     print(filters)
     if filters:
         return {'$and': filters}
@@ -236,6 +266,12 @@ def register():
     if USER_COLLECTION.find_one({'user_email': user_email}):
         return jsonify({'error': 'Email already exists'}), 400  # Bad Request
     
+    companies_list = []
+    if user_role == 'admin':
+        companies = COMPANIES_COLLECTION.find({})
+        for company in companies:
+            companies_list.append(company["_id"])
+    
 
     # Create a new user document in the database
     new_user = {
@@ -244,7 +280,7 @@ def register():
         'user_name': user_name,
         'user_password': hashed_password,
         'user_role': user_role,
-        'companies': []
+        'companies': companies_list
     }
 
     USER_COLLECTION.insert_one(new_user)
@@ -306,6 +342,38 @@ def add_data():
     return jsonify('Done!')
 
 
+@app.route("/api/add-segment", methods=['POST'])
+def add_segment():
+    token = request.headers.get('Authorization')
+    try:
+        data = request.get_json()
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        user_id = payload['user_id']
+        company_id = data.get('company_id')
+        segment_name = data.get('segment_name')
+        filters = data.get('filters')
+
+
+        user = USER_COLLECTION.find_one({'_id': user_id})
+
+
+        new_segment = {
+            "_id": uuid.uuid4().hex,
+            "segment_name": segment_name,
+            "attached_company": company_id,
+            "created_by": user["user_name"],
+            "filters": filters
+        }
+
+        SEGMENT_COLLECTION.insert_one(new_segment)
+
+        return jsonify('Done!')
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Token has expired"}), 401
+    except jwt.DecodeError as e:
+        return jsonify({"error": "Invalid token"}), 401
+
+
 @app.route("/api/delete-user", methods=['POST'])
 def delete_user():
     data = request.get_json()
@@ -331,11 +399,22 @@ def delete_company():
 
     return jsonify("done!")
 
+
+@app.route("/api/delete-segment", methods=['POST'])
+def delete_segment():
+    data = request.get_json()
+
+    segment_id = data.get('segment_id')
+
+    SEGMENT_COLLECTION.delete_one({'_id':segment_id})
+
+    return jsonify("done!")
+
 @app.route("/api/import", methods=['POST'])
 def import_data():
     company_id = request.args.get('id')
     company_collection = DB_CLIENT[f'{company_id}_data']
-    path = '/Users/neevassouline/Desktop/Coding Projects/IcewebIO/backend/IBD_S.csv'
+    path = '/Users/neevassouline/Desktop/Coding Projects/IcewebIO/backend/data.csv'
 
     df = pd.read_csv(path)
     df.fillna('-', inplace=True)
@@ -344,6 +423,8 @@ def import_data():
     df['hour'] = df['date'].dt.strftime('%H:%M:%S')
     df['date'] = df['date'].dt.strftime('%Y-%m-%d')
     df['fullName'] = df['firstName'] + ' ' + df['lastName']
+    df['url'] = df['url'].apply(lambda x: x.replace(f'{urlparse(x).scheme}://{urlparse(x).netloc}', ''))
+
 
     # Rearrange columns in the desired order
     df_filtered = df[DESIRED_COLUNMS_ORDER]
@@ -388,6 +469,168 @@ def import_data():
         thread.join()
 
     return jsonify('Done!')
+
+
+@app.route("/api/get-company-list", methods=['POST'])
+def get_company_list():
+    companies = []
+    token = request.headers.get('Authorization')
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        user_id = payload['user_id']
+
+        user = USER_COLLECTION.find_one({'_id': user_id})
+        companies_arr = user['companies']
+
+        for id in companies_arr:
+            id = id.lower()
+            company = COMPANIES_COLLECTION.find_one({"_id": id})
+            if company:
+                company_collection = DB_CLIENT[f'{id}_data']
+                journey_count, people_count = get_counts(company_collection)
+
+                companies.append({
+                    "company_details": company,
+                    "counts": {
+                        "journey_count": journey_count,
+                        "people_count": people_count
+                    }
+                })
+
+        return jsonify(companies), 200
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Token has expired"}), 401
+    except jwt.DecodeError as e:
+        print(e)
+        return jsonify({"error": "Invalid token"}), 401
+
+@app.route("/api/get-user-list", methods=['POST'])
+def get_user_list():
+    users_lst = []
+    token = request.headers.get('Authorization')
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        user_id = payload['user_id']
+
+        users = USER_COLLECTION.find({})
+
+        for user in users:
+            users_lst.append({
+                "user_name": user['user_name'],
+                "user_id": user['_id']
+            })
+        
+        return jsonify(users_lst), 200
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Token has expired"}), 401
+    except jwt.DecodeError as e:
+        print(e)
+        return jsonify({"error": "Invalid token"}), 401
+
+
+@app.route("/api/get-segment-list", methods=['POST'])
+def get_segment_list():
+    segment_list = []
+    token = request.headers.get('Authorization')
+    try:
+        data = request.get_json()
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        user_id = payload['user_id']
+        company_id = data.get("company_id")
+
+        company_collection = DB_CLIENT[f'{company_id}_data']
+        segments = SEGMENT_COLLECTION.find({"attached_company": company_id})
+
+
+        for segment in segments:
+            filter_query = build_filter(segment["filters"])
+            people_count = get_counts(company_collection,filter_query)[1]
+            segment_list.append({
+                "segment_id": segment["_id"],
+                "segment_name": segment["segment_name"],
+                "created_by": segment["created_by"],
+                "people_count": people_count
+
+            })
+
+        if len(segment_list) > 0:
+            return jsonify(segment_list), 200
+        else:
+            return jsonify('Not Found')
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Token has expired"}), 401
+    except jwt.DecodeError as e:
+        print(e)
+        return jsonify({"error": "Invalid token"}), 401
+
+    
+@app.route("/api/get-data", methods=['POST'])
+def get_users():
+    data = request.get_json()
+
+    company_id = data.get('id').lower()
+    start_date = data.get('start-date')
+    end_date = data.get('end-date')
+    page = data.get('page')
+    search = data.get('search')
+    column_filters = data.get('column_filter')
+    filters = data.get('filters')
+    sorting = data.get('sorting')
+
+
+    try:
+        if len(filters) > 0:
+            filter_query = build_filter(filters,column_filters)
+        elif len(filters) == 0:
+            return jsonify('ignore')
+    except TypeError:
+        try:
+            if filters[0] == 'segnew':
+                filter_query = build_filter(filter_params=filters[1])
+        except IndexError:
+            filter_query = build_filter(filter_params=None,column_filters=column_filters)
+        except TypeError:
+            filter_query = build_filter(filter_params=None,column_filters=column_filters)
+
+
+    # print(filter_query)
+
+    collection = DB_CLIENT[f'{company_id}_data']
+
+    date_range_query = get_date_query(start_date,end_date)
+
+    skip = page * ITEMS_PER_PAGE
+    
+    if search != 'false':
+        regex_search = re.compile(search.lower(), re.IGNORECASE)
+        instance = collection.find({
+            '$and': [
+                {'fullName': {"$regex": regex_search}},
+                date_range_query,
+                filter_query  # Include filter conditions
+            ]
+        }).skip(skip).limit(ITEMS_PER_PAGE)
+    else:
+        instance = collection.find({
+            '$and': [date_range_query, filter_query]  # Include filter conditions
+        }).skip(skip).limit(ITEMS_PER_PAGE)
+
+    # Apply sorting if provided
+    if sorting:
+        # Add sorting logic based on the sorting parameter
+        for option in sorting:
+            print(option["id"])
+            print(option["desc"])
+            if option["desc"] == "False":
+                instance = instance.sort([(option["id"], 1)])
+            elif option["desc"] == "True":
+                instance = instance.sort([(option["id"], -1)])
+
+
+    response_data = {
+        'users': json.loads(json_util.dumps(list(instance))),
+    }
+    return jsonify(response_data)
 
 
 @app.route("/api/get-user-details", methods=['POST'])
@@ -460,7 +703,7 @@ def get_company_popular():
         date_range_query = get_date_query(start_date,end_date)
 
         popular_urls, urls_counts = get_most_popular(company_collection,date_range_query)
-
+        
         response = {
             'popular_urls': popular_urls,
             'popular_urls_counts': urls_counts
@@ -474,114 +717,14 @@ def get_company_popular():
         print(e)
         return jsonify({"error": "Invalid token"}), 401
 
-@app.route("/api/get-company-list", methods=['POST'])
-def get_company_list():
-    companies = []
-    token = request.headers.get('Authorization')
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-        user_id = payload['user_id']
-
-        user = USER_COLLECTION.find_one({'_id': user_id})
-        companies_arr = user['companies']
-
-        for id in companies_arr:
-            id = id.lower()
-            company = COMPANIES_COLLECTION.find_one({"_id": id})
-            if company:
-                company_collection = DB_CLIENT[f'{id}_data']
-                journey_count, people_count = get_counts(company_collection)
-
-                companies.append({
-                    "company_details": company,
-                    "counts": {
-                        "journey_count": journey_count,
-                        "people_count": people_count
-                    }
-                })
-
-        return jsonify(companies), 200
-    except jwt.ExpiredSignatureError:
-        return jsonify({"error": "Token has expired"}), 401
-    except jwt.DecodeError as e:
-        print(e)
-        return jsonify({"error": "Invalid token"}), 401
-
-@app.route("/api/get-user-list", methods=['POST'])
-def get_user_list():
-    users_lst = []
-    token = request.headers.get('Authorization')
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-        user_id = payload['user_id']
-
-        users = USER_COLLECTION.find({})
-
-        for user in users:
-            users_lst.append({
-                "user_name": user['user_name'],
-                "user_id": user['_id']
-            })
-        
-        return jsonify(users_lst), 200
-    except jwt.ExpiredSignatureError:
-        return jsonify({"error": "Token has expired"}), 401
-    except jwt.DecodeError as e:
-        print(e)
-        return jsonify({"error": "Invalid token"}), 401
-
-
-    
-@app.route("/api/get-data", methods=['POST'])
-def get_users():
+@app.route("/api/get-segment-filters", methods=['POST'])
+def get_segment_filters():
     data = request.get_json()
+    segment_id = data.get("segment_id")
 
-    company_id = data.get('id').lower()
-    start_date = data.get('start-date')
-    end_date = data.get('end-date')
-    page = data.get('page')
-    search = data.get('search')
-    filters = data.get('column_filter')
-    sorting = data.get('sorting')
-    
-    collection = DB_CLIENT[f'{company_id}_data']
+    segment = SEGMENT_COLLECTION.find_one({"_id": str(segment_id)})
 
-    filter_query = build_filter(filters)
-
-    date_range_query = get_date_query(start_date,end_date)
-
-    skip = page * ITEMS_PER_PAGE
-    
-    if search != 'false':
-        regex_search = re.compile(search.lower(), re.IGNORECASE)
-        instance = collection.find({
-            '$and': [
-                {'fullName': {"$regex": regex_search}},
-                date_range_query,
-                filter_query  # Include filter conditions
-            ]
-        }).skip(skip).limit(ITEMS_PER_PAGE)
-    else:
-        instance = collection.find({
-            '$and': [date_range_query, filter_query]  # Include filter conditions
-        }).skip(skip).limit(ITEMS_PER_PAGE)
-
-    # Apply sorting if provided
-    if sorting:
-        # Add sorting logic based on the sorting parameter
-        for option in sorting:
-            print(option["id"])
-            print(option["desc"])
-            if option["desc"] == "False":
-                instance = instance.sort([(option["id"], 1)])
-            elif option["desc"] == "True":
-                instance = instance.sort([(option["id"], -1)])
-
-
-    response_data = {
-        'users': json.loads(json_util.dumps(list(instance))),
-    }
-    return jsonify(response_data)
+    return jsonify(segment["filters"])
 
 
 @app.route("/api/update-company", methods=['POST'])
@@ -625,7 +768,26 @@ def update_company():
         print(e)
         return jsonify({"error": "Invalid token"}), 401
 
+@app.route("/api/update-segment", methods=['POST'])
+def update_segment():
+    token = request.headers.get('Authorization')
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        data = request.get_json()
+        segment_id = data.get("segment_id")
+        new_segment_data = data.get("new_segment_data")
+        print(new_segment_data)
 
+        SEGMENT_COLLECTION.update_one({"_id": segment_id}, {'$set': new_segment_data})
+
+        return jsonify({"message": "Segment updated successfully"})
+
+
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Token has expired"}), 401
+    except jwt.DecodeError as e:
+        print(e)
+        return jsonify({"error": "Invalid token"}), 401
 
 
 
