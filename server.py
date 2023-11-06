@@ -960,7 +960,3 @@ def download_users():
 def internal_error(error):
 
     return jsonify("Not Found")
-
-
-if __name__ == '__main__':
-    app.run(port='8080')
