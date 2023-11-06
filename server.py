@@ -1,10 +1,10 @@
-from datetime import datetime , timedelta
-from flask import Flask, render_template, request, redirect, session,url_for, jsonify , send_file , Response
+from datetime import datetime, timedelta
+from flask import Flask, render_template, request, redirect, session, url_for, jsonify, send_file, Response, send_from_directory
 from flask_bcrypt import Bcrypt
 from urllib.parse import urlparse
 from pymongo import MongoClient
 from bson import json_util
-from datetime import datetime , date
+from datetime import datetime, date
 import pandas as pd
 from flask_cors import CORS
 import random
@@ -15,6 +15,7 @@ import jwt
 import csv
 import re
 import threading
+import concurrent.futures
 
 
 
@@ -24,7 +25,8 @@ bcrypt = Bcrypt(app)
 
 
 # DB_CONNECTOR = MongoClient("mongodb://icewebniv:G3ccZpGQXvs6mVdsYuTCEfk3EuDKTdASUsNyEi6HCFoFp7Af3ESn0asd80pDRIP1w51FILE3QvdYACDbYY0n4g==@icewebniv.mongo.cosmos.azure.com:10255/?ssl=true&retrywrites=false&replicaSet=globaldb&maxIdleTimeMS=120000&appName=@icewebniv@")
-DB_CONNECTOR = MongoClient("mongodb://icwebio:yJtwZocIwp8tZ4CQGAnRVvBxCv2i3bGIDHa3Za7w6sP3ww5I5Bgm8e1OpSSMbvdLIpEh7KDeWX4WACDbtUkLGw==@icwebio.mongo.cosmos.azure.com:10255/?ssl=true&replicaSet=globaldb&retrywrites=false&maxIdleTimeMS=120000&appName=@icwebio@")
+DB_CONNECTOR = MongoClient(
+    "mongodb://icwebio:yJtwZocIwp8tZ4CQGAnRVvBxCv2i3bGIDHa3Za7w6sP3ww5I5Bgm8e1OpSSMbvdLIpEh7KDeWX4WACDbtUkLGw==@icwebio.mongo.cosmos.azure.com:10255/?ssl=true&replicaSet=globaldb&retrywrites=false&maxIdleTimeMS=120000&appName=@icwebio@")
 DB_CLIENT = DB_CONNECTOR['main']
 ADMIN_DB = DB_CONNECTOR
 DB_CLIENT.command("enableSharding", "main")
@@ -34,11 +36,9 @@ ROLE_COLLECTION = DB_CLIENT['roles']
 SEGMENT_COLLECTION = DB_CLIENT['segments']
 SECRET_KEY = 'iceweb123456789'
 
-DESIRED_COLUNMS_ORDER = ["date","id","hour","fullName","firstName","lastName","url","facebook","linkedIn","twitter","email","optIn","optInDate","optInIp","optInUrl","pixelFirstHitDate","pixelLastHitDate","bebacks","phone","dnc","age","gender","maritalStatus","address","city","state","zip","householdIncome","netWorth","incomeLevels","peopleInHousehold","adultsInHousehold","childrenInHousehold","veteransInHousehold","education","creditRange","ethnicGroup","generation","homeOwner","occupationDetail","politicalParty","religion","childrenBetweenAges0_3","childrenBetweenAges4_6","childrenBetweenAges7_9","childrenBetweenAges10_12","childrenBetweenAges13_18","behaviors","childrenAgeRanges","interests","ownsAmexCard","ownsBankCard","dwellingType","homeHeatType","homePrice","homePurchasedYearsAgo","homeValue","householdNetWorth","language","mortgageAge","mortgageAmount","mortgageLoanType","mortgageRefinanceAge","mortgageRefinanceAmount","mortgageRefinanceType","isMultilingual","newCreditOfferedHousehold","numberOfVehiclesInHousehold","ownsInvestment","ownsPremiumAmexCard","ownsPremiumCard","ownsStocksAndBonds","personality","isPoliticalContributor","isVoter","premiumIncomeHousehold","urbanicity","maid","maidOs"]
+DESIRED_COLUNMS_ORDER = ["date", "id", "hour", "fullName", "firstName", "lastName", "url", "facebook", "linkedIn", "twitter", "email", "optIn", "optInDate", "optInIp", "optInUrl", "pixelFirstHitDate", "pixelLastHitDate", "bebacks", "phone", "dnc", "age", "gender", "maritalStatus", "address", "city", "state", "zip", "householdIncome", "netWorth", "incomeLevels", "peopleInHousehold", "adultsInHousehold", "childrenInHousehold", "veteransInHousehold", "education", "creditRange", "ethnicGroup", "generation", "homeOwner", "occupationDetail", "politicalParty", "religion", "childrenBetweenAges0_3", "childrenBetweenAges4_6", "childrenBetweenAges7_9",
+                         "childrenBetweenAges10_12", "childrenBetweenAges13_18", "behaviors", "childrenAgeRanges", "interests", "ownsAmexCard", "ownsBankCard", "dwellingType", "homeHeatType", "homePrice", "homePurchasedYearsAgo", "homeValue", "householdNetWorth", "language", "mortgageAge", "mortgageAmount", "mortgageLoanType", "mortgageRefinanceAge", "mortgageRefinanceAmount", "mortgageRefinanceType", "isMultilingual", "newCreditOfferedHousehold", "numberOfVehiclesInHousehold", "ownsInvestment", "ownsPremiumAmexCard", "ownsPremiumCard", "ownsStocksAndBonds", "personality", "isPoliticalContributor", "isVoter", "premiumIncomeHousehold", "urbanicity", "maid", "maidOs"]
 ITEMS_PER_PAGE = 13
-
-
-
 
 
 def generate_hashed_id(row):
@@ -47,10 +47,12 @@ def generate_hashed_id(row):
     hashed_id = hashlib.sha1(row_string.encode()).hexdigest()
     return hashed_id
 
+
 def insert_chunk(collection, records):
     collection.insert_many(records)
 
-def generate_jwt_token(user_id,user_role):
+
+def generate_jwt_token(user_id, user_role):
     # Define the payload of the token (typically contains user-related data)
     payload = {
         'user_id': user_id,
@@ -64,52 +66,54 @@ def generate_jwt_token(user_id,user_role):
     return token
 
 
-def get_most_popular(collection,date_range_query):
+def get_most_popular(collection, date_range_query):
     url_list = []
     count_list = []
     pipeline = [
-    {
-        "$match": 
-            date_range_query
-        
-    },
-    {
-        "$group": {
-            "_id": "$url",  # Group by the field you want to count
-            "count": {"$sum": 1}  # Count occurrences of each value
-        }
-    },
-    {
-        "$sort": {"count": -1}  # Sort by count in descending order
-    },
-    {
-        "$limit": 10
-    }
-    ]
-
-    result = list(collection.aggregate(pipeline))
-    
-    for item in result:
-        url_list.append(item['_id'])
-        count_list.append(item['count'])
-    
-    return url_list, count_list
-
-def get_counts(collection,date_range_query = None):
-    if date_range_query:
-        pipeline = [
         {
-            "$match": date_range_query
+            "$match":
+            date_range_query
+
         },
         {
             "$group": {
-                "_id": "$fullName"
+                "_id": "$url",  # Group by the field you want to count
+                "count": {"$sum": 1}  # Count occurrences of each value
             }
         },
         {
-            "$count": "total_distinct_count"
+            "$sort": {"count": -1}  # Sort by count in descending order
+        },
+        {
+            "$limit": 10
         }
+    ]
+
+    result = list(collection.aggregate(pipeline))
+
+    for item in result:
+        url_list.append(item['_id'])
+        count_list.append(item['count'])
+
+    return url_list, count_list
+
+
+def get_counts(collection, date_range_query=None):
+    if date_range_query:
+        pipeline = [
+            {
+                "$match": date_range_query
+            },
+            {
+                "$group": {
+                    "_id": "$fullName"
+                }
+            },
+            {
+                "$count": "total_distinct_count"
+            }
         ]
+
         result = list(collection.aggregate(pipeline))
         journey_count = collection.count_documents(date_range_query)
         try:
@@ -128,12 +132,12 @@ def get_counts(collection,date_range_query = None):
             }
         ]
         pipeline_journey = [
-        {
-        "$group": {
-            "_id": None,
-            "count": {"$sum": 1}
-        }
-        }
+            {
+                "$group": {
+                    "_id": None,
+                    "count": {"$sum": 1}
+                }
+            }
         ]
 
         result_people = list(collection.aggregate(pipeline_people))
@@ -145,17 +149,17 @@ def get_counts(collection,date_range_query = None):
             people_count = 0
             journey_count = 0
 
-    return journey_count , people_count
+    return journey_count, people_count
 
 
+def get_date_query(start_date, end_date, search=None):
 
-def get_date_query(start_date, end_date,search=None):
-
-    if any([start_date == 'undefined', start_date == None]) :
+    if any([start_date == 'undefined', start_date == None]):
         start_datetime_to_obj = datetime.today()
-        start_datetime = datetime.strftime(start_datetime_to_obj,'%Y-%m-%d')
-        end_datetime_to_obj = datetime.strptime(f'{datetime.now().year}-01-01','%Y-%m-%d')
-        end_datetime = datetime.strftime(end_datetime_to_obj,'%Y-%m-%d')
+        start_datetime = datetime.strftime(start_datetime_to_obj, '%Y-%m-%d')
+        end_datetime_to_obj = datetime.strptime(
+            f'{datetime.now().year}-01-01', '%Y-%m-%d')
+        end_datetime = datetime.strftime(end_datetime_to_obj, '%Y-%m-%d')
         date_range_query = {
             'date': {
                 '$gte': end_datetime,
@@ -165,9 +169,9 @@ def get_date_query(start_date, end_date,search=None):
     else:
         # Parse the start_date and end_date as datetime objects
         start_datetime_to_obj = datetime.strptime(start_date, '%Y-%m-%d')
-        start_datetime = datetime.strftime(start_datetime_to_obj,'%Y-%m-%d')
-        end_datetime_to_obj = datetime.strptime(end_date, '%Y-%m-%d') 
-        end_datetime = datetime.strftime(end_datetime_to_obj,'%Y-%m-%d')
+        start_datetime = datetime.strftime(start_datetime_to_obj, '%Y-%m-%d')
+        end_datetime_to_obj = datetime.strptime(end_date, '%Y-%m-%d')
+        end_datetime = datetime.strftime(end_datetime_to_obj, '%Y-%m-%d')
 
         # Create a query to find documents within the specified date range
         date_range_query = {
@@ -183,8 +187,8 @@ def get_date_query(start_date, end_date,search=None):
 def build_filter(filter_params=None, column_filters=None):
     filters = []
     if filter_params:
+        print(filter_params)
         for filter in filter_params:
-            print(f'{filter} asd')
             filter_key = filter["id"]
             filter_value = filter["value"]
             if filter_key == 'range':
@@ -192,12 +196,25 @@ def build_filter(filter_params=None, column_filters=None):
                 min_val = int(filter_value['minVal'])
                 max_val = int(filter_value['maxVal'])
 
-                filters.append({column_name: {'$gte': min_val, '$lte': max_val }})
+                filters.append(
+                    {column_name: {'$gte': min_val, '$lte': max_val}})
             elif filter_key == 'contains':
-                column_name = filter_value['name']
-                value = filter_value['value']
-
-                filters.append({column_name: {"$regex": value, "$options": 'i'}})
+                or_arr = []
+                for include in filter_value['include_array']:
+                    # column_name = include['contains_name']
+                    column_name = 'url'
+                    include_value = include['value']
+                    include_type = include['type']
+                    if include_type == 'contain':
+                        or_arr.append(
+                            {column_name: {"$regex": include_value, "$options": 'i'}})
+                    elif include_type == 'start':
+                        or_arr.append(
+                            {column_name: {"$regex": f'^{include_value}', "$options": 'i'}})
+                    elif include_type == 'exact':
+                        or_arr.append(
+                            {column_name: include_value})
+                filters.append({'$or': or_arr})
 
             elif filter_key == 'checkbox':
                 column_name = filter_value['name']
@@ -207,20 +224,21 @@ def build_filter(filter_params=None, column_filters=None):
                 for value in value_arr:
                     value = re.escape(value)
                     or_arr.append({column_name: {'$regex': value}})
-                
+
                 filters.append({'$or': or_arr})
-                
+            else:
+                filters.append(
+                    {filter_key: {"$regex": filter_value, "$options": 'i'}})
+
+
     if column_filters:
         for filter in column_filters:
-            print(filter)
             filter_key = filter["id"]
             filter_value = filter["value"]
-            filters.append({filter_key: {"$regex": filter_value, "$options": 'i'}})
-
-
+            filters.append(
+                {filter_key: {"$regex": filter_value, "$options": 'i'}})
 
     # Combine filters using '$and' for multiple filters
-    print(filters)
     if filters:
         return {'$and': filters}
     else:
@@ -236,19 +254,19 @@ def login():
     user = USER_COLLECTION.find_one({'user_email': email})
 
     if user and bcrypt.check_password_hash(user['user_password'], password):
-        token = generate_jwt_token(user["_id"],user["user_role"])
+        token = generate_jwt_token(user["_id"], user["user_role"])
         # Password is correct
         # You can generate a token here and include it in the response for future authenticated requests
         response = {
             'message': 'Login successful',
-            'user_id': user['_id'],  # Convert ObjectId to string for JSON serialization
+            # Convert ObjectId to string for JSON serialization
+            'user_id': user['_id'],
             'token': token
         }
         return jsonify(response), 200
     else:
         # Invalid credentials
         return jsonify({'error': 'Login failed'}), 401  # Unauthorized
-    
 
 
 @app.route("/api/register", methods=['POST'])
@@ -260,18 +278,18 @@ def register():
     user_role = content.get('user_role')
 
     # Hash the password before storing it in the database
-    hashed_password = bcrypt.generate_password_hash(user_password).decode('utf-8')
+    hashed_password = bcrypt.generate_password_hash(
+        user_password).decode('utf-8')
 
-        # Check if the email already exists in the database
+    # Check if the email already exists in the database
     if USER_COLLECTION.find_one({'user_email': user_email}):
         return jsonify({'error': 'Email already exists'}), 400  # Bad Request
-    
+
     companies_list = []
     if user_role == 'admin':
         companies = COMPANIES_COLLECTION.find({})
         for company in companies:
             companies_list.append(company["_id"])
-    
 
     # Create a new user document in the database
     new_user = {
@@ -287,6 +305,7 @@ def register():
 
     return jsonify({'message': 'Registration successful'}), 201  # Created
 
+
 @app.route('/api/add-company', methods=['POST'])
 def add_company():
     content = request.get_json()
@@ -297,7 +316,6 @@ def add_company():
 
     if len(attached_users[0]) < 1:
         attached_users.clear()
-
 
     # Check if the email already exists in the database
     if COMPANIES_COLLECTION.find_one({'company_email': company_email}):
@@ -312,11 +330,12 @@ def add_company():
         'company_name': company_name,
         'company_email': company_email,
         'attached_users': attached_users
-        
+
         # Add other user-related daata as needed
     }
 
-    USER_COLLECTION.update_many({"user_role": "admin"},{"$push" : {"companies": company_id}})
+    USER_COLLECTION.update_many({"user_role": "admin"}, {
+                                "$push": {"companies": company_id}})
     COMPANIES_COLLECTION.insert_one(new_company)
 
     return jsonify({'message': 'Registration successful'}), 201  # Created
@@ -327,17 +346,16 @@ def add_data():
     company_id = request.args.get('id')
     company_collection = DB_CLIENT[f'{company_id}_data']
 
-    df = pd.read_csv('/Users/neevassouline/Desktop/Coding Projects/IcewebIO/backend/people_data_20.csv')
+    df = pd.read_csv(
+        '/Users/neevassouline/Desktop/Coding Projects/IcewebIO/backend/people_data_20.csv')
     df.fillna('-', inplace=True)
 
     df[['date', 'hour']] = df['date'].str.split(' ', expand=True)
     df[['hour']] = df['hour'].str.split('+', expand=True)[[0]]
     df['fullName'] = df['firstName'] + ' ' + df['lastName']
 
-
     list_of_lists = df.to_dict(orient='records')
     company_collection.insert_many(list_of_lists)
-
 
     return jsonify('Done!')
 
@@ -353,9 +371,7 @@ def add_segment():
         segment_name = data.get('segment_name')
         filters = data.get('filters')
 
-
         user = USER_COLLECTION.find_one({'_id': user_id})
-
 
         new_segment = {
             "_id": uuid.uuid4().hex,
@@ -380,9 +396,9 @@ def delete_user():
 
     user_id = data.get('user_id')
     user = USER_COLLECTION.find_one({'_id': user_id})
-    USER_COLLECTION.delete_one({'_id':user_id})
-    COMPANIES_COLLECTION.update_many({'attached_users': {'$regex': user['user_email']}},{'$pull':{'attached_users': user['user_email']}})
-
+    USER_COLLECTION.delete_one({'_id': user_id})
+    COMPANIES_COLLECTION.update_many({'attached_users': {'$regex': user['user_email']}}, {
+                                     '$pull': {'attached_users': user['user_email']}})
 
     return jsonify('done!')
 
@@ -393,9 +409,9 @@ def delete_company():
 
     company_id = data.get('company_id')
 
-    COMPANIES_COLLECTION.delete_one({'_id':company_id})
-    USER_COLLECTION.update_many({'companies': {'$regex': company_id}},{'$pull':{'companies': company_id}})
-
+    COMPANIES_COLLECTION.delete_one({'_id': company_id})
+    USER_COLLECTION.update_many({'companies': {'$regex': company_id}}, {
+                                '$pull': {'companies': company_id}})
 
     return jsonify("done!")
 
@@ -406,9 +422,10 @@ def delete_segment():
 
     segment_id = data.get('segment_id')
 
-    SEGMENT_COLLECTION.delete_one({'_id':segment_id})
+    SEGMENT_COLLECTION.delete_one({'_id': segment_id})
 
     return jsonify("done!")
+
 
 @app.route("/api/import", methods=['POST'])
 def import_data():
@@ -423,8 +440,8 @@ def import_data():
     df['hour'] = df['date'].dt.strftime('%H:%M:%S')
     df['date'] = df['date'].dt.strftime('%Y-%m-%d')
     df['fullName'] = df['firstName'] + ' ' + df['lastName']
-    df['url'] = df['url'].apply(lambda x: x.replace(f'{urlparse(x).scheme}://{urlparse(x).netloc}', ''))
-
+    df['url'] = df['url'].apply(lambda x: x.replace(
+        f'{urlparse(x).scheme}://{urlparse(x).netloc}', ''))
 
     # Rearrange columns in the desired order
     df_filtered = df[DESIRED_COLUNMS_ORDER]
@@ -435,12 +452,12 @@ def import_data():
     admin_db = DB_CONNECTOR['admin']
 
     try:
-        shard_key = {"id": "hashed"}  
+        shard_key = {"id": "hashed"}
         admin_db.command("enableSharding", "main")
-        admin_db.command("shardCollection", f"main.{company_id}_data", key=shard_key)
+        admin_db.command("shardCollection",
+                         f"main.{company_id}_data", key=shard_key)
     except Exception:
         print('asd')
-
 
     chunk_size = 100
     num_threads = 4
@@ -451,17 +468,18 @@ def import_data():
     while i < l:
         chunk = df_filtered.iloc[i:i+chunk_size]
         records = chunk.to_dict('records')
-        
+
         if len(threads) >= num_threads:
             # Wait for running threads to complete
             for thread in threads:
                 thread.join()
             threads = []
 
-        thread = threading.Thread(target=insert_chunk, args=(company_collection, records))
+        thread = threading.Thread(
+            target=insert_chunk, args=(company_collection, records))
         thread.start()
         threads.append(thread)
-        
+
         i += chunk_size
 
     # Wait for any remaining threads to complete
@@ -504,6 +522,7 @@ def get_company_list():
         print(e)
         return jsonify({"error": "Invalid token"}), 401
 
+
 @app.route("/api/get-user-list", methods=['POST'])
 def get_user_list():
     users_lst = []
@@ -519,7 +538,7 @@ def get_user_list():
                 "user_name": user['user_name'],
                 "user_id": user['_id']
             })
-        
+
         return jsonify(users_lst), 200
     except jwt.ExpiredSignatureError:
         return jsonify({"error": "Token has expired"}), 401
@@ -541,10 +560,9 @@ def get_segment_list():
         company_collection = DB_CLIENT[f'{company_id}_data']
         segments = SEGMENT_COLLECTION.find({"attached_company": company_id})
 
-
         for segment in segments:
             filter_query = build_filter(segment["filters"])
-            people_count = get_counts(company_collection,filter_query)[1]
+            people_count = get_counts(company_collection, filter_query)[1]
             segment_list.append({
                 "segment_id": segment["_id"],
                 "segment_name": segment["segment_name"],
@@ -563,7 +581,7 @@ def get_segment_list():
         print(e)
         return jsonify({"error": "Invalid token"}), 401
 
-    
+
 @app.route("/api/get-data", methods=['POST'])
 def get_users():
     data = request.get_json()
@@ -576,56 +594,128 @@ def get_users():
     column_filters = data.get('column_filter')
     filters = data.get('filters')
     sorting = data.get('sorting')
-
+    is_segnew = False
 
     try:
         if len(filters) > 0:
-            filter_query = build_filter(filters,column_filters)
+            filter_query = build_filter(filters, column_filters)
+
         elif len(filters) == 0:
             return jsonify('ignore')
     except TypeError:
         try:
             if filters[0] == 'segnew':
                 filter_query = build_filter(filter_params=filters[1])
+                is_segnew = True
+                search = 'false'
         except IndexError:
-            filter_query = build_filter(filter_params=None,column_filters=column_filters)
+            filter_query = build_filter(
+                filter_params=None, column_filters=column_filters)
         except TypeError:
-            filter_query = build_filter(filter_params=None,column_filters=column_filters)
+            filter_query = build_filter(
+                filter_params=None, column_filters=column_filters)
 
-
-    # print(filter_query)
 
     collection = DB_CLIENT[f'{company_id}_data']
 
-    date_range_query = get_date_query(start_date,end_date)
+    date_range_query = get_date_query(start_date, end_date)
 
     skip = page * ITEMS_PER_PAGE
-    
+
     if search != 'false':
         regex_search = re.compile(search.lower(), re.IGNORECASE)
-        instance = collection.find({
+        base_query = {
             '$and': [
                 {'fullName': {"$regex": regex_search}},
                 date_range_query,
-                filter_query  # Include filter conditions
+                filter_query
             ]
-        }).skip(skip).limit(ITEMS_PER_PAGE)
+        }
     else:
-        instance = collection.find({
-            '$and': [date_range_query, filter_query]  # Include filter conditions
-        }).skip(skip).limit(ITEMS_PER_PAGE)
+        base_query = {
+            '$and': [date_range_query, filter_query]
+        }
+
+        if is_segnew:
+            filters = filters[1]
+        if filters:
+            print(f'{filter_query} qsdnfjadsbfgljsdblc')
+            if len(filters) > 0:
+                for filter in filters:
+                    filter_key = filter["id"]
+                    filter_value = filter["value"]
+                    if filter_key == 'contains':
+                        try:
+                            exclude_array = filter_value['exclude_array']
+                            or_arr = []
+                            for exclude in exclude_array:
+                                exclude_value = exclude['value']
+                                exclude_type = exclude['type']
+                                if len(exclude_value) > 0:
+                                    if exclude_type == 'contain' or exclude_type == '':
+                                        exclude_argg_query = {
+                                                                "$regexMatch": {
+                                                                    "input": "$url",
+                                                                    "regex": re.escape(exclude_value),
+                                                                    "options": 'i'
+                                                                }
+                                                            }
+                                    elif exclude_type == 'start':
+                                        exclude_argg_query = {
+                                                                "$regexMatch": {
+                                                                    "input": "$url",
+                                                                    "regex": f'^{re.escape(exclude_value)}',
+                                                                    "options": 'i'
+                                                                }
+                                                            }
+                                    elif exclude_type == 'exact':
+                                        exclude_argg_query = {
+                                                                'url': exclude_value
+                                                            }
+                                    pipeline = [
+                                        {
+                                            '$skip': skip
+                                        },
+                                        {
+                                            "$group": {
+                                                "_id": "$fullName",
+                                                "contains_excluded_url": {
+                                                    "$max": {
+                                                        "$cond": [
+                                                            exclude_argg_query,
+                                                            1,
+                                                            0
+                                                        ]
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "$match": {
+                                                "contains_excluded_url": 1
+                                            }
+                                        },
+                                        {
+                                            '$limit': ITEMS_PER_PAGE
+                                        },
+                                    ]
+                                    user_ids = [user['_id'] for user in collection.aggregate(pipeline)]
+                                    or_arr.append({"fullName": {"$nin": user_ids}})
+                            base_query['$and'].append({"$or": or_arr})
+                        except KeyError:
+                            pass
+
+    instance = collection.find(base_query).skip(skip).limit(ITEMS_PER_PAGE)
 
     # Apply sorting if provided
     if sorting:
         # Add sorting logic based on the sorting parameter
         for option in sorting:
-            print(option["id"])
-            print(option["desc"])
             if option["desc"] == "False":
                 instance = instance.sort([(option["id"], 1)])
             elif option["desc"] == "True":
                 instance = instance.sort([(option["id"], -1)])
-
+    
 
     response_data = {
         'users': json.loads(json_util.dumps(list(instance))),
@@ -652,6 +742,7 @@ def get_user_details():
     except jwt.DecodeError as e:
         return jsonify({"error": "Invalid token"}), 401
 
+
 @app.route("/api/get-company-counts", methods=['POST'])
 def get_company_counts():
     token = request.headers.get('Authorization')
@@ -666,17 +757,15 @@ def get_company_counts():
 
         company_collection = DB_CLIENT[f'{company_id}_data']
 
-        date_range_query = get_date_query(start_date,end_date)
+        date_range_query = get_date_query(start_date, end_date)
 
-        journey_count, people_count = get_counts(company_collection,date_range_query)        
-        print(journey_count)
-        print(people_count)
-        
+        journey_count, people_count = get_counts(
+            company_collection, date_range_query)
+
         response = {
             'people_count': people_count,
             'journey_count': journey_count,
         }
-
 
         return jsonify(response), 200
     except jwt.ExpiredSignatureError:
@@ -700,15 +789,15 @@ def get_company_popular():
 
         company_collection = DB_CLIENT[f'{company_id}_data']
 
-        date_range_query = get_date_query(start_date,end_date)
+        date_range_query = get_date_query(start_date, end_date)
 
-        popular_urls, urls_counts = get_most_popular(company_collection,date_range_query)
-        
+        popular_urls, urls_counts = get_most_popular(
+            company_collection, date_range_query)
+
         response = {
             'popular_urls': popular_urls,
             'popular_urls_counts': urls_counts
         }
-
 
         return jsonify(response), 200
     except jwt.ExpiredSignatureError:
@@ -716,6 +805,7 @@ def get_company_popular():
     except jwt.DecodeError as e:
         print(e)
         return jsonify({"error": "Invalid token"}), 401
+
 
 @app.route("/api/get-segment-filters", methods=['POST'])
 def get_segment_filters():
@@ -739,24 +829,25 @@ def update_company():
             raise jwt.DecodeError
 
         company_id = content.get('company_id')
-        new_company_data = content.get('new_company_data')  # Replace with the actual data to update
-        
-        
+        # Replace with the actual data to update
+        new_company_data = content.get('new_company_data')
 
         # Use the update_one method to update the company document
         old_company = COMPANIES_COLLECTION.find_one({'_id': company_id})
 
-        result = COMPANIES_COLLECTION.update_one({"_id": company_id}, {"$set": new_company_data})
-
+        result = COMPANIES_COLLECTION.update_one(
+            {"_id": company_id}, {"$set": new_company_data})
 
         if result:
             for user_email in new_company_data.get('attached_users', []):
                 print(user_email)
-                USER_COLLECTION.update_one({"user_email": user_email}, {"$addToSet": {"companies": company_id}})
+                USER_COLLECTION.update_one({"user_email": user_email}, {
+                                           "$addToSet": {"companies": company_id}})
             for user_email in old_company["attached_users"]:
                 print(user_email)
                 if user_email not in new_company_data.get('attached_users', []):
-                    USER_COLLECTION.update_one({'user_email': user_email}, {'$pull':{'companies': company_id}})
+                    USER_COLLECTION.update_one({'user_email': user_email}, {
+                                               '$pull': {'companies': company_id}})
             return jsonify({"message": "Company updated successfully"})
         else:
             print('no')
@@ -768,6 +859,7 @@ def update_company():
         print(e)
         return jsonify({"error": "Invalid token"}), 401
 
+
 @app.route("/api/update-segment", methods=['POST'])
 def update_segment():
     token = request.headers.get('Authorization')
@@ -778,10 +870,10 @@ def update_segment():
         new_segment_data = data.get("new_segment_data")
         print(new_segment_data)
 
-        SEGMENT_COLLECTION.update_one({"_id": segment_id}, {'$set': new_segment_data})
+        SEGMENT_COLLECTION.update_one(
+            {"_id": segment_id}, {'$set': new_segment_data})
 
         return jsonify({"message": "Segment updated successfully"})
-
 
     except jwt.ExpiredSignatureError:
         return jsonify({"error": "Token has expired"}), 401
@@ -790,12 +882,9 @@ def update_segment():
         return jsonify({"error": "Invalid token"}), 401
 
 
-
-
-
 @app.route("/api/search-users", methods=['GET'])
 def search_users():
-    company_name = request.args.get('company-name').replace(" ","_").lower()
+    company_name = request.args.get('company-name').replace(" ", "_").lower()
     collection = DB_CLIENT[f'{company_name}_data']
     query = request.args.get('query').lower()
     regex_query = re.compile(query, re.IGNORECASE)
@@ -806,43 +895,72 @@ def search_users():
 @app.route("/api/download-users", methods=['POST'])
 def download_users():
     data = request.get_json()
-
     company_id = data.get('id').lower()
-    search = data.get('search')
-    start_date = data.get('start-date')
-    end_date = data.get('end-date')
 
     collection = DB_CLIENT[f'{company_id}_data']
 
-    date_range_query = get_date_query(start_date, end_date)
+    with open('output.csv', "w", newline="") as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=DESIRED_COLUNMS_ORDER)
+        writer.writeheader()
 
-    if len(search) > 0:
-        regex_search = re.compile(search.lower(), re.IGNORECASE)
-        instance = collection.find({
-            '$and': [
-                {'fullName': {"$regex": regex_search}},
-                date_range_query
-            ]
-        })
-    else:
-        
-        instance = collection.find(date_range_query)
-        print(type(instance))
+        for document in collection.find():
+            row = {field: document.get(field, "")
+                   for field in DESIRED_COLUNMS_ORDER}
+            writer.writerow(row)
 
-    def generate():
-        # Yield CSV header
-        yield ','.join(DESIRED_COLUNMS_ORDER) + '\n'
+    return send_from_directory('', 'output.csv', as_attachment=True)
 
-        # Fetch and yield data in smaller chunks
-        for doc in instance:
-            yield ','.join(str(doc.get(field, '')) for field in DESIRED_COLUNMS_ORDER) + '\n'
+    # data = request.get_json()
 
-    response = Response(generate(), mimetype='text/csv')
-    response.headers['Content-Disposition'] = 'attachment; filename=export.csv'
+    # company_id = data.get('id').lower()
+    # search = data.get('search')
+    # start_date = data.get('start-date')
+    # end_date = data.get('end-date')
+    # filters = data.get('filter')
 
-    return response
+    # filter_query = build_filter(filters)
+
+    # collection = DB_CLIENT[f'{company_id}_data']
+
+    # date_range_query = get_date_query(start_date, end_date)
+
+    # # if len(search) > 0:
+    # #     regex_search = re.compile(search.lower(), re.IGNORECASE)
+    # #     instance = collection.find({
+    # #         '$and': [
+    # #             {'fullName': {"$regex": regex_search}},
+    # #             date_range_query,filter_query
+    # #         ]
+    # #     })
+
+    # # else:
+    # instance = collection.find({'$and': [
+    #     # date_range_query,
+    #     filter_query
+    # ]})
+
+    # print(list(instance))
+    # print('dasd')
+
+    # def generate():
+    #     # Yield CSV header
+    #     yield ','.join(DESIRED_COLUNMS_ORDER) + '\n'
+
+    #     # Fetch and yield data in smaller chunks
+    #     for doc in instance:
+    #         yield ','.join(str(doc.get(field, '')) for field in DESIRED_COLUNMS_ORDER) + '\n'
+
+    # response = Response(generate(), mimetype='text/csv')
+    # response.headers['Content-Disposition'] = 'attachment; filename=export.csv'
+
+    # return response
+
 
 @app.errorhandler(500)
 def internal_error(error):
 
     return jsonify("Not Found")
+
+
+if __name__ == '__main__':
+    app.run(port='8080')
