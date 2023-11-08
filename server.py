@@ -1,4 +1,8 @@
 from datetime import datetime, timedelta
+import apscheduler.jobstores.base
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.combining import OrTrigger
+from apscheduler.triggers.cron import CronTrigger
 from flask import Flask, render_template, request, redirect, session, url_for, jsonify, send_file, Response, send_from_directory
 from flask_bcrypt import Bcrypt
 from urllib.parse import urlparse
@@ -22,6 +26,9 @@ import concurrent.futures
 app = Flask(__name__)
 CORS(app)
 bcrypt = Bcrypt(app)
+scheduler = BackgroundScheduler()
+scheduler.start()
+
 
 
 # DB_CONNECTOR = MongoClient("mongodb://icewebniv:G3ccZpGQXvs6mVdsYuTCEfk3EuDKTdASUsNyEi6HCFoFp7Af3ESn0asd80pDRIP1w51FILE3QvdYACDbYY0n4g==@icewebniv.mongo.cosmos.azure.com:10255/?ssl=true&retrywrites=false&replicaSet=globaldb&maxIdleTimeMS=120000&appName=@icewebniv@")
@@ -39,6 +46,7 @@ SECRET_KEY = 'iceweb123456789'
 DESIRED_COLUNMS_ORDER = ["date", "id", "hour", "fullName", "firstName", "lastName", "url", "facebook", "linkedIn", "twitter", "email", "optIn", "optInDate", "optInIp", "optInUrl", "pixelFirstHitDate", "pixelLastHitDate", "bebacks", "phone", "dnc", "age", "gender", "maritalStatus", "address", "city", "state", "zip", "householdIncome", "netWorth", "incomeLevels", "peopleInHousehold", "adultsInHousehold", "childrenInHousehold", "veteransInHousehold", "education", "creditRange", "ethnicGroup", "generation", "homeOwner", "occupationDetail", "politicalParty", "religion", "childrenBetweenAges0_3", "childrenBetweenAges4_6", "childrenBetweenAges7_9",
                          "childrenBetweenAges10_12", "childrenBetweenAges13_18", "behaviors", "childrenAgeRanges", "interests", "ownsAmexCard", "ownsBankCard", "dwellingType", "homeHeatType", "homePrice", "homePurchasedYearsAgo", "homeValue", "householdNetWorth", "language", "mortgageAge", "mortgageAmount", "mortgageLoanType", "mortgageRefinanceAge", "mortgageRefinanceAmount", "mortgageRefinanceType", "isMultilingual", "newCreditOfferedHousehold", "numberOfVehiclesInHousehold", "ownsInvestment", "ownsPremiumAmexCard", "ownsPremiumCard", "ownsStocksAndBonds", "personality", "isPoliticalContributor", "isVoter", "premiumIncomeHousehold", "urbanicity", "maid", "maidOs"]
 ITEMS_PER_PAGE = 13
+
 
 
 def generate_hashed_id(row):
@@ -65,11 +73,62 @@ def generate_jwt_token(user_id, user_role):
 
     return token
 
+def convert_to_user_friendly_time(hour_str):
+    # Convert the hour string to an integer
+    hour = int(hour_str)
 
-def get_most_popular(collection, date_range_query):
-    url_list = []
+    if 1 <= hour <= 11:
+        return f"{hour} AM"
+    elif hour == 12:
+        return f"{hour} PM"
+    elif 13 <= hour <= 23:
+        return f"{hour - 12} PM"
+    elif hour == 0:
+        return "12 AM"
+    else:
+        return "Invalid Hour"
+
+def get_most_popular(collection, date_range_query, popular_type):
+    item_list = []
     count_list = []
-    pipeline = [
+
+    if popular_type == 'hour':
+
+        project_stage = {
+            "$project": {
+                "hour": {
+                    "$substr": ["$hour", 0, 2]  # Extract the first 2 characters (the hour part)
+                }
+            }
+        }
+
+        pipeline = [
+            {
+                "$match": date_range_query
+            },
+            project_stage,  # Add the project stage to extract the hour part
+            {
+                "$group": {
+                    "_id": "$hour",  # Group by the extracted hour
+                    "count": {"$sum": 1}  # Count occurrences of each hour
+                }
+            },
+            {
+                "$sort": {"count": -1}  # Sort by count in descending order
+            },
+            {
+                "$limit": 10
+            }
+        ]
+        result = list(collection.aggregate(pipeline))
+
+        for item in result:
+            item_list.append(convert_to_user_friendly_time(item['_id']))
+            count_list.append(item['count'])
+
+        return item_list, count_list
+    else:
+         pipeline = [
         {
             "$match":
             date_range_query
@@ -77,7 +136,7 @@ def get_most_popular(collection, date_range_query):
         },
         {
             "$group": {
-                "_id": "$url",  # Group by the field you want to count
+                "_id": f"${popular_type}",  # Group by the field you want to count
                 "count": {"$sum": 1}  # Count occurrences of each value
             }
         },
@@ -87,15 +146,49 @@ def get_most_popular(collection, date_range_query):
         {
             "$limit": 10
         }
-    ]
-
+        ]
     result = list(collection.aggregate(pipeline))
 
     for item in result:
-        url_list.append(item['_id'])
+        item_list.append(item['_id'])
         count_list.append(item['count'])
 
-    return url_list, count_list
+    return item_list, count_list
+
+
+def get_by_precent_count(collection, field, date_range_query):
+    item_list = []
+    count_list = []
+
+    pipeline = [
+        {
+            "$match":
+            date_range_query
+
+        },
+        {
+            "$group": {
+                "_id": f"${field}",  # Group by the field you want to count
+                "count": {"$sum": 1}  # Count occurrences of each value
+            }
+        },
+        {
+            "$sort": {"count": -1}  # Sort by count in descending order
+        },
+        {
+            "$limit": 10
+        }
+        ]
+    
+    result = list(collection.aggregate(pipeline))
+    for item in result:
+        if item['_id'] == '-' or item['_id'] == 'Unknown':
+            pass
+        else:
+            item_list.append(item['_id'])
+            count_list.append(item['count'])
+
+    return item_list, count_list
 
 
 def get_counts(collection, date_range_query=None):
@@ -187,7 +280,6 @@ def get_date_query(start_date, end_date, search=None):
 def build_filter(filter_params=None, column_filters=None):
     filters = []
     if filter_params:
-        print(filter_params)
         for filter in filter_params:
             filter_key = filter["id"]
             filter_value = filter["value"]
@@ -201,20 +293,34 @@ def build_filter(filter_params=None, column_filters=None):
             elif filter_key == 'contains':
                 or_arr = []
                 for include in filter_value['include_array']:
-                    # column_name = include['contains_name']
-                    column_name = 'url'
-                    include_value = include['value']
-                    include_type = include['type']
-                    if include_type == 'contain':
-                        or_arr.append(
-                            {column_name: {"$regex": include_value, "$options": 'i'}})
-                    elif include_type == 'start':
-                        or_arr.append(
-                            {column_name: {"$regex": f'^{include_value}', "$options": 'i'}})
-                    elif include_type == 'exact':
-                        or_arr.append(
-                            {column_name: include_value})
-                filters.append({'$or': or_arr})
+                    try:
+                        column_name = 'url'
+                        include_value = include['value']
+                        include_type = include['type']
+                        if include_type == 'contain':
+                            or_arr.append(
+                                {column_name: {"$regex": include_value, "$options": 'i'}})
+                        elif include_type == 'start':
+                            or_arr.append(
+                                {column_name: {"$regex": f'^{include_value}', "$options": 'i'}})
+                        elif include_type == 'end':
+                            or_arr.append(
+                                {column_name: {"$regex": f'{include_value}$', "$options": 'i'}})
+                        elif include_type == 'exact':
+                            or_arr.append(
+                                {column_name: include_value})
+                        elif include_type == 'notequal':
+
+                            regex_pattern = f"{re.escape(include_value)}"
+                            
+
+                            or_arr.append(
+                                {column_name: {"$regex": f'{regex_pattern}', "$not": {"$regex": fr"\{include_value}$"}, "$options": 'i'}})
+                    except KeyError:
+                        pass
+                        
+                if len(or_arr) > 0:
+                    filters.append({'$or': or_arr})
 
             elif filter_key == 'checkbox':
                 column_name = filter_value['name']
@@ -243,6 +349,13 @@ def build_filter(filter_params=None, column_filters=None):
         return {'$and': filters}
     else:
         return {}  # No filters
+    
+
+def add_user_ids_to_segment(segment_id,company_id,filters):
+    company_collection = DB_CLIENT[f'{company_id}_data']
+
+
+
 
 
 @app.route("/api/login", methods=['POST'])
@@ -639,71 +752,35 @@ def get_users():
         if is_segnew:
             filters = filters[1]
         if filters:
-            print(f'{filter_query} qsdnfjadsbfgljsdblc')
-            if len(filters) > 0:
+            try:
+                user_ids_to_exclude = set()
+                # Compile regex patterns for different types outside the loop
+                regex_patterns = {
+                    'contain': (lambda value: re.compile(re.escape(value), re.IGNORECASE)),
+                    'start': (lambda value: re.compile(f"^{re.escape(value)}", re.IGNORECASE)),
+                    'end': (lambda value: re.compile(f"{re.escape(value)}$", re.IGNORECASE)),
+                }
+
+                user_ids_to_exclude = set()
+
                 for filter in filters:
-                    filter_key = filter["id"]
-                    filter_value = filter["value"]
-                    if filter_key == 'contains':
-                        try:
-                            exclude_array = filter_value['exclude_array']
-                            or_arr = []
-                            for exclude in exclude_array:
-                                exclude_value = exclude['value']
-                                exclude_type = exclude['type']
-                                if len(exclude_value) > 0:
-                                    if exclude_type == 'contain' or exclude_type == '':
-                                        exclude_argg_query = {
-                                                                "$regexMatch": {
-                                                                    "input": "$url",
-                                                                    "regex": re.escape(exclude_value),
-                                                                    "options": 'i'
-                                                                }
-                                                            }
-                                    elif exclude_type == 'start':
-                                        exclude_argg_query = {
-                                                                "$regexMatch": {
-                                                                    "input": "$url",
-                                                                    "regex": f'^{re.escape(exclude_value)}',
-                                                                    "options": 'i'
-                                                                }
-                                                            }
-                                    elif exclude_type == 'exact':
-                                        exclude_argg_query = {
-                                                                'url': exclude_value
-                                                            }
-                                    pipeline = [
-                                        {
-                                            '$skip': skip
-                                        },
-                                        {
-                                            "$group": {
-                                                "_id": "$fullName",
-                                                "contains_excluded_url": {
-                                                    "$max": {
-                                                        "$cond": [
-                                                            exclude_argg_query,
-                                                            1,
-                                                            0
-                                                        ]
-                                                    }
-                                                }
-                                            }
-                                        },
-                                        {
-                                            "$match": {
-                                                "contains_excluded_url": 1
-                                            }
-                                        },
-                                        {
-                                            '$limit': ITEMS_PER_PAGE
-                                        },
-                                    ]
-                                    user_ids = [user['_id'] for user in collection.aggregate(pipeline)]
-                                    or_arr.append({"fullName": {"$nin": user_ids}})
-                            base_query['$and'].append({"$or": or_arr})
-                        except KeyError:
-                            pass
+                    if filter["id"] == 'contains':
+                        querys = []
+                        exclude_array = filter["value"].get('exclude_array', [])
+                        for exclude in exclude_array:
+                            exclude_value = exclude['value']
+                            exclude_type = exclude['type'] or 'contain'
+                            exclude_regex = regex_patterns.get(exclude_type, regex_patterns['contain'])(exclude_value)
+                            querys.append({"url": {"$regex": exclude_regex}})
+                        excluded_users = collection.find({"$or": querys})
+                        user_ids_to_exclude.update(user['fullName'] for user in excluded_users)
+
+                print(len(user_ids_to_exclude))
+
+                if user_ids_to_exclude:
+                    base_query['fullName'] = {"$nin": list(user_ids_to_exclude)}
+            except KeyError:
+                pass
 
     instance = collection.find(base_query).skip(skip).limit(ITEMS_PER_PAGE)
 
@@ -775,6 +852,42 @@ def get_company_counts():
         return jsonify({"error": "Invalid token"}), 401
 
 
+@app.route("/api/get-by-precent-counts", methods=['POST'])
+def get_by_precent_counts():
+    token = request.headers.get('Authorization')
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+
+
+        company_id = request.json.get('company_id')
+        start_date = request.json.get('start_date')
+        end_date = request.json.get('end_date')
+        field = request.json.get('field')
+
+        date_range_query = get_date_query(start_date, end_date)
+
+        company_collection = DB_CLIENT[f'{company_id}_data']
+
+
+
+        item_list, count_list = get_by_precent_count(company_collection,field,date_range_query)
+
+        response = {
+            'items': item_list,
+            'counts': count_list
+        }
+
+        return jsonify(response), 200
+
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Token has expired"}), 401
+    except jwt.DecodeError as e:
+        print(e)
+        return jsonify({"error": "Invalid token"}), 401
+
+
+
+
 @app.route("/api/get-company-popular", methods=['POST'])
 def get_company_popular():
     token = request.headers.get('Authorization')
@@ -786,17 +899,17 @@ def get_company_popular():
         company_id = request.json.get('company_id')
         start_date = request.json.get('start_date')
         end_date = request.json.get('end_date')
+        popular_type = request.json.get('type')
 
         company_collection = DB_CLIENT[f'{company_id}_data']
 
         date_range_query = get_date_query(start_date, end_date)
 
-        popular_urls, urls_counts = get_most_popular(
-            company_collection, date_range_query)
+        popular_items, popular_items_counts = get_most_popular(company_collection, date_range_query, popular_type)
 
         response = {
-            'popular_urls': popular_urls,
-            'popular_urls_counts': urls_counts
+            'popular_items': popular_items,
+            'popular_items_counts': popular_items_counts
         }
 
         return jsonify(response), 200
@@ -891,69 +1004,84 @@ def search_users():
     instance = collection.find({'firstName': {"$regex": regex_query}})
     return json.loads(json_util.dumps(list(instance)))
 
+def stream_chunked_documents(collection):
+    # Create a chunk size for streaming
+    chunk_size = 1000
+
+    # Loop through the documents in chunks
+    for chunk in collection.find({}, projection={'_id': False}, batch_size=chunk_size):
+        # Convert each document to JSON string
+        json_docs = [json.dumps(doc, default=json_util.default) for doc in chunk]
+
+        # Send the JSON string as chunk of the response
+        yield f'{json_docs}\n'
 
 @app.route("/api/download-users", methods=['POST'])
 def download_users():
     data = request.get_json()
     company_id = data.get('id').lower()
+    search = data.get('search')
+    start_date = data.get('start-date')
+    end_date = data.get('end-date')
+    filters = data.get('filters')
 
+    filter_query = build_filter(filters)
+    date_range_query = get_date_query(start_date, end_date)
     collection = DB_CLIENT[f'{company_id}_data']
 
-    with open('output.csv', "w", newline="") as csv_file:
-        writer = csv.DictWriter(csv_file, fieldnames=DESIRED_COLUNMS_ORDER)
-        writer.writeheader()
+    base_query = {
+        '$and': [date_range_query, filter_query]
+    }
 
-        for document in collection.find():
-            row = {field: document.get(field, "")
-                   for field in DESIRED_COLUNMS_ORDER}
-            writer.writerow(row)
+    if search != 'false':
+        regex_search = re.compile(search.lower(), re.IGNORECASE)
+        base_query['fullName'] = {"$regex": regex_search}
 
-    return send_from_directory('', 'output.csv', as_attachment=True)
+    # Fetch user IDs to exclude
+    if filters:
+        if filters:
+            try:
+                user_ids_to_exclude = set()
+                # Compile regex patterns for different types outside the loop
+                regex_patterns = {
+                    'contain': (lambda value: re.compile(re.escape(value), re.IGNORECASE)),
+                    'start': (lambda value: re.compile(f"^{re.escape(value)}", re.IGNORECASE)),
+                    'end': (lambda value: re.compile(f"{re.escape(value)}$", re.IGNORECASE)),
+                }
 
-    # data = request.get_json()
+                user_ids_to_exclude = set()
 
-    # company_id = data.get('id').lower()
-    # search = data.get('search')
-    # start_date = data.get('start-date')
-    # end_date = data.get('end-date')
-    # filters = data.get('filter')
+                for filter in filters:
+                    if filter["id"] == 'contains':
+                        exclude_array = filter["value"].get('exclude_array', [])
+                        for exclude in exclude_array:
+                            exclude_value = exclude['value']
+                            exclude_type = exclude['type'] or 'contain'
+                            exclude_regex = regex_patterns.get(exclude_type, regex_patterns['contain'])(exclude_value)
+                            excluded_users = collection.find({"url": {"$regex": exclude_regex}})
+                            user_ids_to_exclude.update(user['fullName'] for user in excluded_users)
 
-    # filter_query = build_filter(filters)
+                print(user_ids_to_exclude)
 
-    # collection = DB_CLIENT[f'{company_id}_data']
+                if user_ids_to_exclude:
+                    base_query['fullName'] = {"$nin": list(user_ids_to_exclude)}
+            except KeyError:
+                pass
 
-    # date_range_query = get_date_query(start_date, end_date)
+    instance = collection.find(base_query)
 
-    # # if len(search) > 0:
-    # #     regex_search = re.compile(search.lower(), re.IGNORECASE)
-    # #     instance = collection.find({
-    # #         '$and': [
-    # #             {'fullName': {"$regex": regex_search}},
-    # #             date_range_query,filter_query
-    # #         ]
-    # #     })
+    def generate():
+        # Yield CSV header
+        yield ','.join(DESIRED_COLUNMS_ORDER) + '\n'
 
-    # # else:
-    # instance = collection.find({'$and': [
-    #     # date_range_query,
-    #     filter_query
-    # ]})
+        # Fetch and yield data in smaller chunks
+        for doc in instance:
+            yield ','.join(str(doc.get(field, '')) for field in DESIRED_COLUNMS_ORDER) + '\n'
 
-    # print(list(instance))
-    # print('dasd')
+    response = Response(generate(), mimetype='text/csv')
+    response.headers['Content-Disposition'] = 'attachment; filename=export.csv'
 
-    # def generate():
-    #     # Yield CSV header
-    #     yield ','.join(DESIRED_COLUNMS_ORDER) + '\n'
-
-    #     # Fetch and yield data in smaller chunks
-    #     for doc in instance:
-    #         yield ','.join(str(doc.get(field, '')) for field in DESIRED_COLUNMS_ORDER) + '\n'
-
-    # response = Response(generate(), mimetype='text/csv')
-    # response.headers['Content-Disposition'] = 'attachment; filename=export.csv'
-
-    # return response
+    return response
 
 
 @app.errorhandler(500)
