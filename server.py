@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta
-import apscheduler.jobstores.base
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.combining import OrTrigger
-from apscheduler.triggers.cron import CronTrigger
+# import apscheduler.jobstores.base
+# from apscheduler.schedulers.background import BackgroundScheduler
+# from apscheduler.triggers.combining import OrTrigger
+# from apscheduler.triggers.cron import CronTrigger
 from flask import Flask, render_template, request, redirect, session, url_for, jsonify, send_file, Response, send_from_directory
 from flask_bcrypt import Bcrypt
 from urllib.parse import urlparse
@@ -26,8 +26,8 @@ import concurrent.futures
 app = Flask(__name__)
 CORS(app)
 bcrypt = Bcrypt(app)
-scheduler = BackgroundScheduler()
-scheduler.start()
+# scheduler = BackgroundScheduler()
+# scheduler.start()
 
 
 
