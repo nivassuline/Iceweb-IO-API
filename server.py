@@ -680,7 +680,8 @@ def get_segment_list():
                 "segment_id": segment["_id"],
                 "segment_name": segment["segment_name"],
                 "created_by": segment["created_by"],
-                "people_count": people_count
+                "people_count": people_count,
+                "filters": segment["filters"]
 
             })
 
@@ -774,8 +775,6 @@ def get_users():
                             querys.append({"url": {"$regex": exclude_regex}})
                         excluded_users = collection.find({"$or": querys})
                         user_ids_to_exclude.update(user['fullName'] for user in excluded_users)
-
-                print(len(user_ids_to_exclude))
 
                 if user_ids_to_exclude:
                     base_query['fullName'] = {"$nin": list(user_ids_to_exclude)}
