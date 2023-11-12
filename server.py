@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta
-# import apscheduler.jobstores.base
-# from apscheduler.schedulers.background import BackgroundScheduler
-# from apscheduler.triggers.combining import OrTrigger
-# from apscheduler.triggers.cron import CronTrigger
+import apscheduler.jobstores.base
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.combining import OrTrigger
+from apscheduler.triggers.cron import CronTrigger
 from flask import Flask, render_template, request, redirect, session, url_for, jsonify, send_file, Response, send_from_directory
 from flask_bcrypt import Bcrypt
 from urllib.parse import urlparse
@@ -26,8 +26,8 @@ import concurrent.futures
 app = Flask(__name__)
 CORS(app)
 bcrypt = Bcrypt(app)
-# scheduler = BackgroundScheduler()
-# scheduler.start()
+scheduler = BackgroundScheduler()
+scheduler.start()
 
 
 
@@ -351,12 +351,56 @@ def build_filter(filter_params=None, column_filters=None):
         return {}  # No filters
     
 
-def add_user_ids_to_segment(segment_id,company_id,filters):
-    company_collection = DB_CLIENT[f'{company_id}_data']
+
+def update_excluded_users(segment_id):
+    segment = SEGMENT_COLLECTION.find_one({'_id': segment_id})
+    if segment:
+        filters = segment['filters']
+        company_id = segment['attached_company']
+        collection = DB_CLIENT[f'{company_id}_data']
+        user_ids_to_exclude = set()
+
+        # Compile regex patterns for different types outside the loop
+        regex_patterns = {
+            'contain': (lambda value: re.compile(re.escape(value), re.IGNORECASE)),
+            'start': (lambda value: re.compile(f"^{re.escape(value)}", re.IGNORECASE)),
+            'end': (lambda value: re.compile(f"{re.escape(value)}$", re.IGNORECASE)),
+        }
+
+        for filter_item in filters:
+            if filter_item["id"] == 'contains':
+                exclude_array = filter_item.get("value", {}).get('exclude_array', [])
+                querys = []
+                for exclude in exclude_array:
+                    exclude_value = exclude.get('value')
+                    exclude_type = exclude.get('type', 'contain')
+                    exclude_regex = regex_patterns.get(exclude_type, regex_patterns['contain'])(exclude_value)
+                    querys.append({"url": {"$regex": exclude_regex}})
+                excluded_users = collection.find({"$or": querys})
+                user_ids_to_exclude.update(user.get('fullName') for user in excluded_users)
+
+        SEGMENT_COLLECTION.update_one(
+            {'_id': segment_id},
+            {'$set': {'excluded_users': list(user_ids_to_exclude)}}
+        )
+    else:
+        print("Segment not found or an error occurred.")
 
 
 
+for segment in SEGMENT_COLLECTION.find():
+    scheduler.add_job(id=segment['_id'], 
+                      func=update_excluded_users,
+                      trigger=CronTrigger(hour='*/10'), 
+                      misfire_grace_time=15*60,
+                        args=[segment['_id']])
+    
+    
+@app.route("/api/test", methods=['GET'])
+def tes():
+    scheduler.print_jobs()
 
+    return jsonify('done!')
 
 @app.route("/api/login", methods=['POST'])
 def login():
@@ -451,6 +495,8 @@ def add_company():
                                 "$push": {"companies": company_id}})
     COMPANIES_COLLECTION.insert_one(new_company)
 
+
+
     return jsonify({'message': 'Registration successful'}), 201  # Created
 
 
@@ -483,19 +529,28 @@ def add_segment():
         company_id = data.get('company_id')
         segment_name = data.get('segment_name')
         filters = data.get('filters')
+        excluded_users = data.get('excluded_users', [])
+        
 
         user = USER_COLLECTION.find_one({'_id': user_id})
 
+        segment_id = uuid.uuid4().hex
+
         new_segment = {
-            "_id": uuid.uuid4().hex,
+            "_id": segment_id,
             "segment_name": segment_name,
             "attached_company": company_id,
             "created_by": user["user_name"],
-            "filters": filters
+            "filters": filters,
+            "excluded_users": excluded_users
         }
 
         SEGMENT_COLLECTION.insert_one(new_segment)
 
+        scheduler.add_job(id=segment_id, func=update_excluded_users,trigger=CronTrigger(hour='*/10'), misfire_grace_time=15*60,
+                            args=[segment_id])
+
+        print(scheduler.get_job(segment_id))
         return jsonify('Done!')
     except jwt.ExpiredSignatureError:
         return jsonify({"error": "Token has expired"}), 401
@@ -536,6 +591,10 @@ def delete_segment():
     segment_id = data.get('segment_id')
 
     SEGMENT_COLLECTION.delete_one({'_id': segment_id})
+
+    print(scheduler.get_job(segment_id))
+
+    scheduler.remove_job(segment_id)
 
     return jsonify("done!")
 
@@ -681,7 +740,8 @@ def get_segment_list():
                 "segment_name": segment["segment_name"],
                 "created_by": segment["created_by"],
                 "people_count": people_count,
-                "filters": segment["filters"]
+                "filters": segment["filters"],
+                "excluded_users": segment['excluded_users']
 
             })
 
@@ -699,7 +759,6 @@ def get_segment_list():
 @app.route("/api/get-data", methods=['POST'])
 def get_users():
     data = request.get_json()
-
     company_id = data.get('id').lower()
     start_date = data.get('start-date')
     end_date = data.get('end-date')
@@ -708,7 +767,11 @@ def get_users():
     column_filters = data.get('column_filter')
     filters = data.get('filters')
     sorting = data.get('sorting')
+    segment_id = data.get('segment_id')
     is_segnew = False
+    excluded_users = data.get('excluded_users')
+    user_ids_to_exclude = None
+
 
     try:
         if len(filters) > 0:
@@ -736,6 +799,7 @@ def get_users():
 
     skip = page * ITEMS_PER_PAGE
 
+
     if search != 'false':
         regex_search = re.compile(search.lower(), re.IGNORECASE)
         base_query = {
@@ -750,36 +814,39 @@ def get_users():
             '$and': [date_range_query, filter_query]
         }
 
-        if is_segnew:
-            filters = filters[1]
-        if filters:
-            try:
-                user_ids_to_exclude = set()
-                # Compile regex patterns for different types outside the loop
-                regex_patterns = {
-                    'contain': (lambda value: re.compile(re.escape(value), re.IGNORECASE)),
-                    'start': (lambda value: re.compile(f"^{re.escape(value)}", re.IGNORECASE)),
-                    'end': (lambda value: re.compile(f"{re.escape(value)}$", re.IGNORECASE)),
-                }
+        if excluded_users:
+            base_query['fullName'] = {"$nin": excluded_users}
+        else:
+            if is_segnew:
+                filters = filters[1]
+            if filters:
+                try:
+                    user_ids_to_exclude = set()
+                    # Compile regex patterns for different types outside the loop
+                    regex_patterns = {
+                        'contain': (lambda value: re.compile(re.escape(value), re.IGNORECASE)),
+                        'start': (lambda value: re.compile(f"^{re.escape(value)}", re.IGNORECASE)),
+                        'end': (lambda value: re.compile(f"{re.escape(value)}$", re.IGNORECASE)),
+                    }
 
-                user_ids_to_exclude = set()
+                    user_ids_to_exclude = set()
 
-                for filter in filters:
-                    if filter["id"] == 'contains':
-                        querys = []
-                        exclude_array = filter["value"].get('exclude_array', [])
-                        for exclude in exclude_array:
-                            exclude_value = exclude['value']
-                            exclude_type = exclude['type'] or 'contain'
-                            exclude_regex = regex_patterns.get(exclude_type, regex_patterns['contain'])(exclude_value)
-                            querys.append({"url": {"$regex": exclude_regex}})
-                        excluded_users = collection.find({"$or": querys})
-                        user_ids_to_exclude.update(user['fullName'] for user in excluded_users)
+                    for filter in filters:
+                        if filter["id"] == 'contains':
+                            querys = []
+                            exclude_array = filter["value"].get('exclude_array', [])
+                            for exclude in exclude_array:
+                                exclude_value = exclude['value']
+                                exclude_type = exclude['type'] or 'contain'
+                                exclude_regex = regex_patterns.get(exclude_type, regex_patterns['contain'])(exclude_value)
+                                querys.append({"url": {"$regex": exclude_regex}})
+                            excluded_users = collection.find({"$or": querys})
+                            user_ids_to_exclude.update(user['fullName'] for user in excluded_users)
 
-                if user_ids_to_exclude:
-                    base_query['fullName'] = {"$nin": list(user_ids_to_exclude)}
-            except KeyError:
-                pass
+                    if user_ids_to_exclude:
+                        base_query['fullName'] = {"$nin": list(user_ids_to_exclude)}
+                except KeyError:
+                    pass
 
     instance = collection.find(base_query).skip(skip).limit(ITEMS_PER_PAGE)
 
@@ -792,10 +859,16 @@ def get_users():
             elif option["desc"] == "True":
                 instance = instance.sort([(option["id"], -1)])
     
+    if user_ids_to_exclude:
+        response_data = {
+            'users': json.loads(json_util.dumps(list(instance))),
+            'excluded_users': list(user_ids_to_exclude)
+        }
+    else:
+        response_data = {
+            'users': json.loads(json_util.dumps(list(instance)))
+        }
 
-    response_data = {
-        'users': json.loads(json_util.dumps(list(instance))),
-    }
     return jsonify(response_data)
 
 
