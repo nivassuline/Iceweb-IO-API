@@ -553,21 +553,24 @@ for segment in SEGMENT_COLLECTION.find():
 
 for company in COMPANIES_COLLECTION.find():
     scheduler.add_job(
-        id=company['_id'],
         func=update_company_counts,
         trigger=OrTrigger([CronTrigger(hour=18, minute=0)]), 
         misfire_grace_time=15*60,
         args=[company['_id']]
     )
+    scheduler.add_job(
+        func=update_popular_chart,
+        trigger=OrTrigger([CronTrigger(hour=19, minute=0)]), 
+        misfire_grace_time=15*60,
+        args=[company['_id']]
+    )
+    scheduler.add_job(
+        func=update_by_precent,
+        trigger=OrTrigger([CronTrigger(hour=19, minute=0)]), 
+        misfire_grace_time=15*60,
+        args=[company['_id']]
+    )
 
-# for company in COMPANIES_COLLECTION.find():
-#     scheduler.add_job(
-#         id=company['_id'],
-#         func=update_popular_chart,
-#         trigger=OrTrigger([CronTrigger(hour=19, minute=0)]), 
-#         misfire_grace_time=15*60,
-#         args=[company['_id']]
-#     )
 
 
 
@@ -577,7 +580,6 @@ for company in COMPANIES_COLLECTION.find():
 @app.route("/api/test", methods=['GET'])
 def tes():
     scheduler.print_jobs()
-    update_popular_chart
 
     return jsonify('done!')
 
