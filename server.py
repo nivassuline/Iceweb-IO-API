@@ -42,6 +42,7 @@ USER_COLLECTION = DB_CLIENT['users']
 ROLE_COLLECTION = DB_CLIENT['roles']
 SEGMENT_COLLECTION = DB_CLIENT['segments']
 SECRET_KEY = 'iceweb123456789'
+TRIGGER = OrTrigger([CronTrigger(hour=17, minute=0)])
 
 DESIRED_COLUNMS_ORDER = ["date", "id", "hour", "fullName", "firstName", "lastName", "url", "facebook", "linkedIn", "twitter", "email", "optIn", "optInDate", "optInIp", "optInUrl", "pixelFirstHitDate", "pixelLastHitDate", "bebacks", "phone", "dnc", "age", "gender", "maritalStatus", "address", "city", "state", "zip", "householdIncome", "netWorth", "incomeLevels", "peopleInHousehold", "adultsInHousehold", "childrenInHousehold", "veteransInHousehold", "education", "creditRange", "ethnicGroup", "generation", "homeOwner", "occupationDetail", "politicalParty", "religion", "childrenBetweenAges0_3", "childrenBetweenAges4_6", "childrenBetweenAges7_9",
                          "childrenBetweenAges10_12", "childrenBetweenAges13_18", "behaviors", "childrenAgeRanges", "interests", "ownsAmexCard", "ownsBankCard", "dwellingType", "homeHeatType", "homePrice", "homePurchasedYearsAgo", "homeValue", "householdNetWorth", "language", "mortgageAge", "mortgageAmount", "mortgageLoanType", "mortgageRefinanceAge", "mortgageRefinanceAmount", "mortgageRefinanceType", "isMultilingual", "newCreditOfferedHousehold", "numberOfVehiclesInHousehold", "ownsInvestment", "ownsPremiumAmexCard", "ownsPremiumCard", "ownsStocksAndBonds", "personality", "isPoliticalContributor", "isVoter", "premiumIncomeHousehold", "urbanicity", "maid", "maidOs"]
@@ -238,6 +239,7 @@ def get_counts(collection, date_range_query=None):
         try:
             people_count = result_people[0]["total_distinct_count"]
             journey_count = result_journey[0]["count"]
+
         except IndexError:
             people_count = 0
             journey_count = 0
@@ -352,6 +354,159 @@ def build_filter(filter_params=None, column_filters=None):
     
 
 
+
+def update_company_counts(company_id):
+    company = COMPANIES_COLLECTION.find_one({'_id': company_id})
+    if company:
+        company_collection = DB_CLIENT[f'{company_id}_data']
+        pipeline_people = [
+            {
+                "$group": {
+                    "_id": "$fullName"
+                }
+            },
+            {
+                "$count": "total_distinct_count"
+            }
+        ]
+        pipeline_journey = [
+            {
+                "$group": {
+                    "_id": None,
+                    "count": {"$sum": 1}
+                }
+            }
+        ]
+
+        result_people = list(company_collection.aggregate(pipeline_people))
+        result_journey = list(company_collection.aggregate(pipeline_journey))
+        try:
+            people_count = result_people[0]["total_distinct_count"]
+            journey_count = result_journey[0]["count"]
+
+        except IndexError:
+            people_count = 0
+            journey_count = 0
+
+        COMPANIES_COLLECTION.update_one({'_id': company_id}, {'$set' : {'counts' : {
+            "people_count" : people_count,
+            "journey_count" : journey_count
+        }}})
+    else:
+        print("Company not found or an error occurred.")
+
+def update_popular_chart(company_id):
+    popular_chart = {}
+    popular_types = ['hour', 'url']
+    collection = DB_CLIENT[f'{company_id}_data']
+
+    for popular_type in popular_types:
+
+        if popular_type == 'hour':
+            item_list = []
+            count_list = []
+            project_stage = {
+                "$project": {
+                    "hour": {
+                        "$substr": ["$hour", 0, 2]  # Extract the first 2 characters (the hour part)
+                    }
+                }
+            }
+
+            pipeline = [
+                project_stage,  # Add the project stage to extract the hour part
+                {
+                    "$group": {
+                        "_id": "$hour",  # Group by the extracted hour
+                        "count": {"$sum": 1}  # Count occurrences of each hour
+                    }
+                },
+                {
+                    "$sort": {"count": -1}  # Sort by count in descending order
+                },
+                {
+                    "$limit": 10
+                }
+            ]
+            result = list(collection.aggregate(pipeline))
+
+            for item in result:
+                item_list.append(convert_to_user_friendly_time(item['_id']))
+                count_list.append(item['count'])
+
+            popular_chart[popular_type] = {
+                'item_list' : item_list,
+                'count_list' : count_list
+            }
+
+        elif popular_type == 'url':
+            item_list = []
+            count_list = []
+            pipeline = [
+            {
+                "$group": {
+                    "_id": f"${popular_type}",  # Group by the field you want to count
+                    "count": {"$sum": 1}  # Count occurrences of each value
+                }
+            },
+            {
+                "$sort": {"count": -1}  # Sort by count in descending order
+            },
+            {
+                "$limit": 10
+            }
+            ]
+            result = list(collection.aggregate(pipeline))
+
+            for item in result:
+                item_list.append(item['_id'])
+                count_list.append(item['count'])
+            
+            popular_chart[popular_type] = {
+                        'item_list' : item_list,
+                        'count_list' : count_list
+                    }
+    COMPANIES_COLLECTION.update_one({'_id': company_id}, {'$set' : {
+        'popular_chart' : popular_chart
+    }})
+
+def update_by_precent(company_id):
+    collection = DB_CLIENT[f'{company_id}_data']
+    by_precent_chart = {}
+    fields = ['age','gender']
+    for field in fields:
+        item_list = []
+        count_list = []
+        pipeline = [
+            {
+                "$group": {
+                    "_id": f"${field}",  # Group by the field you want to count
+                    "count": {"$sum": 1}  # Count occurrences of each value
+                }
+            },
+            {
+                "$sort": {"count": -1}  # Sort by count in descending order
+            },
+            {
+                "$limit": 10
+            }
+            ]
+        
+        result = list(collection.aggregate(pipeline))
+        for item in result:
+            if item['_id'] == '-' or item['_id'] == 'Unknown':
+                pass
+            else:
+                item_list.append(item['_id'])
+                count_list.append(item['count'])
+
+        by_precent_chart[field] = {
+            'item_list': item_list,
+            'count_list': count_list
+        }
+    COMPANIES_COLLECTION.update_one({'_id': company_id}, {'$set' : {
+        'by_precent_chart' : by_precent_chart
+    }})
 def update_excluded_users(segment_id):
     segment = SEGMENT_COLLECTION.find_one({'_id': segment_id})
     if segment:
@@ -391,14 +546,38 @@ def update_excluded_users(segment_id):
 for segment in SEGMENT_COLLECTION.find():
     scheduler.add_job(id=segment['_id'], 
                       func=update_excluded_users,
-                      trigger=CronTrigger(hour='*/10'), 
+                      trigger=OrTrigger([CronTrigger(hour=18, minute=30)]), 
                       misfire_grace_time=15*60,
-                        args=[segment['_id']])
-    
-    
+                      args=[segment['_id']]
+                        )
+
+for company in COMPANIES_COLLECTION.find():
+    scheduler.add_job(
+        id=company['_id'],
+        func=update_company_counts,
+        trigger=OrTrigger([CronTrigger(hour=18, minute=0)]), 
+        misfire_grace_time=15*60,
+        args=[company['_id']]
+    )
+
+# for company in COMPANIES_COLLECTION.find():
+#     scheduler.add_job(
+#         id=company['_id'],
+#         func=update_popular_chart,
+#         trigger=OrTrigger([CronTrigger(hour=19, minute=0)]), 
+#         misfire_grace_time=15*60,
+#         args=[company['_id']]
+#     )
+
+
+
+
+
+
 @app.route("/api/test", methods=['GET'])
 def tes():
     scheduler.print_jobs()
+    update_popular_chart
 
     return jsonify('done!')
 
@@ -676,14 +855,12 @@ def get_company_list():
             id = id.lower()
             company = COMPANIES_COLLECTION.find_one({"_id": id})
             if company:
-                company_collection = DB_CLIENT[f'{id}_data']
-                journey_count, people_count = get_counts(company_collection)
-
+                counts = company['counts']
                 companies.append({
                     "company_details": company,
                     "counts": {
-                        "journey_count": journey_count,
-                        "people_count": people_count
+                        "journey_count": counts['journey_count'],
+                        "people_count": counts['people_count']
                     }
                 })
 
@@ -906,15 +1083,23 @@ def get_company_counts():
 
         company_collection = DB_CLIENT[f'{company_id}_data']
 
-        date_range_query = get_date_query(start_date, end_date)
+        if any([start_date == 'undefined', start_date == None]):
+            company = COMPANIES_COLLECTION.find_one({'_id': company_id})
+            counts = company['counts']
+            response = {
+                'people_count': counts['people_count'],
+                'journey_count': counts['journey_count'],
+            }
+        else:
+            date_range_query = get_date_query(start_date, end_date)
 
-        journey_count, people_count = get_counts(
-            company_collection, date_range_query)
+            journey_count, people_count = get_counts(
+                company_collection, date_range_query)
 
-        response = {
-            'people_count': people_count,
-            'journey_count': journey_count,
-        }
+            response = {
+                'people_count': people_count,
+                'journey_count': journey_count,
+            }
 
         return jsonify(response), 200
     except jwt.ExpiredSignatureError:
@@ -936,18 +1121,24 @@ def get_by_precent_counts():
         end_date = request.json.get('end_date')
         field = request.json.get('field')
 
-        date_range_query = get_date_query(start_date, end_date)
+        if any([start_date == 'undefined', start_date == None]):
+            company = COMPANIES_COLLECTION.find_one({'_id': company_id})
+            by_precent_chart = company['by_precent_chart'][field]
+            response = {
+                'items': by_precent_chart['item_list'],
+                'counts': by_precent_chart['count_list']
+            }
+        else:
+            date_range_query = get_date_query(start_date, end_date)
 
-        company_collection = DB_CLIENT[f'{company_id}_data']
+            company_collection = DB_CLIENT[f'{company_id}_data']
 
+            item_list, count_list = get_by_precent_count(company_collection,field,date_range_query)
 
-
-        item_list, count_list = get_by_precent_count(company_collection,field,date_range_query)
-
-        response = {
-            'items': item_list,
-            'counts': count_list
-        }
+            response = {
+                'items': item_list,
+                'counts': count_list
+            }
 
         return jsonify(response), 200
 
@@ -974,15 +1165,24 @@ def get_company_popular():
         popular_type = request.json.get('type')
 
         company_collection = DB_CLIENT[f'{company_id}_data']
+        if any([start_date == 'undefined', start_date == None]):  
+            company = COMPANIES_COLLECTION.find_one({'_id': company_id})
+            popular_chart = company["popular_chart"][popular_type]
 
-        date_range_query = get_date_query(start_date, end_date)
+            response = {
+                'popular_items': popular_chart['item_list'],
+                'popular_items_counts': popular_chart['count_list']
+            }
+        else:
+            date_range_query = get_date_query(start_date, end_date)
+            
 
-        popular_items, popular_items_counts = get_most_popular(company_collection, date_range_query, popular_type)
+            popular_items, popular_items_counts = get_most_popular(company_collection, date_range_query, popular_type)
 
-        response = {
-            'popular_items': popular_items,
-            'popular_items_counts': popular_items_counts
-        }
+            response = {
+                'popular_items': popular_items,
+                'popular_items_counts': popular_items_counts
+            }
 
         return jsonify(response), 200
     except jwt.ExpiredSignatureError:
