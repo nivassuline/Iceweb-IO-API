@@ -20,7 +20,7 @@ import csv
 import re
 import threading
 import concurrent.futures
-
+import os
 
 
 app = Flask(__name__)
@@ -579,7 +579,14 @@ for company in COMPANIES_COLLECTION.find():
 
 @app.route("/api/test", methods=['GET'])
 def tes():
-    scheduler.print_jobs()
+    # scheduler.print_jobs()
+
+    file_path = '/company_data/data.csv'
+
+    if os.path.exists(file_path):
+        return jsonify('yes!')
+    else:
+        return jsonify(f'The file {file_path} does not exist.')
 
     return jsonify('done!')
 
