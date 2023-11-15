@@ -583,9 +583,9 @@ def tes():
     file_path = '/companies/data.csv'
 
     if os.path.exists(file_path):
-        print(f'The file {file_path} exists.')
+        return jsonify(f'The file {file_path} exists.')
     else:
-        print(f'The file {file_path} does not exist.')
+        return jsonify(f'The file {file_path} does not exist.')
 
 @app.route("/api/login", methods=['POST'])
 def login():
@@ -1373,7 +1373,3 @@ def download_users():
 def internal_error(error):
 
     return jsonify("Not Found")
-
-
-if __name__ == '__main__':
-    app.run(port='8080')
