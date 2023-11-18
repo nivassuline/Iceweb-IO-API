@@ -691,18 +691,24 @@ def create_df_file_from_db(company_id,segment_id = None,filters=None):
 
 
 
-# for segment in SEGMENT_COLLECTION.find():
-#     scheduler.add_job(id=segment['_id'], 
-#                       func=update_excluded_users,
-#                       trigger=OrTrigger([CronTrigger(hour=18, minute=30)]), 
-#                       misfire_grace_time=15*60,
-#                       args=[segment['_id']]
-#                         )
+for segment in SEGMENT_COLLECTION.find():
+    scheduler.add_job( 
+                      func=create_df_file_from_db,
+                      trigger=OrTrigger([CronTrigger(hour=19, minute=10)]), 
+                      misfire_grace_time=15*60,
+                      args=[segment['attached_company'],segment['_id'],segment['filters']]
+                    )
 
 for company in COMPANIES_COLLECTION.find():
     scheduler.add_job(
-        func=update_company_counts,
+        func=create_df_file_from_db,
         trigger=OrTrigger([CronTrigger(hour=18, minute=0)]), 
+        misfire_grace_time=15*60,
+        args=[company['_id']]
+    )
+    scheduler.add_job(
+        func=update_company_counts,
+        trigger=OrTrigger([CronTrigger(hour=18, minute=30)]), 
         misfire_grace_time=15*60,
         args=[company['_id']]
     )
@@ -714,7 +720,7 @@ for company in COMPANIES_COLLECTION.find():
     )
     scheduler.add_job(
         func=update_by_percent,
-        trigger=OrTrigger([CronTrigger(hour=19, minute=0)]), 
+        trigger=OrTrigger([CronTrigger(hour=19, minute=30)]), 
         misfire_grace_time=15*60,
         args=[company['_id']]
     )
@@ -1484,3 +1490,5 @@ def download_users():
 def internal_error(error):
 
     return jsonify("Not Found")
+
+
