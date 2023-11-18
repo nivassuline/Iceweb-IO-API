@@ -6,3 +6,5 @@ pymongo
 bcrypt
 PyJWT
 APScheduler
+psycopg2
+sqlalchemy
