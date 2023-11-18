@@ -1364,6 +1364,8 @@ def download_users():
         download_file_name = f'{company_name}-{segment_name}_segment-{download_type}'
     else:
         csv_file_path = f'/companies/{company_id}/main-{download_type}.csv'
+        if not os.path.exists(csv_file_path):
+            create_df_file_from_db(company_id)
         download_file_name = f'{company_name}-{download_type}'
 
 
@@ -1382,7 +1384,6 @@ def download_users():
 def internal_error(error):
 
     return jsonify("Not Found")
-
 
 # def update_excluded_users(segment_id):
 #     segment = SEGMENT_COLLECTION.find_one({'_id': segment_id})
