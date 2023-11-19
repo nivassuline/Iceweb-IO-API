@@ -1,8 +1,4 @@
 from datetime import datetime, timedelta
-import apscheduler.jobstores.base
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.combining import OrTrigger
-from apscheduler.triggers.cron import CronTrigger
 from flask import Flask, request,jsonify,  Response, make_response
 from flask_bcrypt import Bcrypt
 from urllib.parse import urlparse
@@ -23,12 +19,15 @@ import psycopg2
 from psycopg2 import pool, sql
 from sqlalchemy import create_engine, text, MetaData, Table, Column, Text
 import os
+from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
+import io
+
+
 
 app = Flask(__name__)
 CORS(app)
 bcrypt = Bcrypt(app)
-scheduler = BackgroundScheduler()
-scheduler.start()
+
 
 
 
@@ -53,7 +52,6 @@ USER_COLLECTION = DB_CLIENT['users']
 ROLE_COLLECTION = DB_CLIENT['roles']
 SEGMENT_COLLECTION = DB_CLIENT['segments']
 SECRET_KEY = 'iceweb123456789'
-TRIGGER = OrTrigger([CronTrigger(hour=17, minute=0)])
 
 DESIRED_COLUNMS_ORDER = ["date", "id", "hour", "fullName", "firstName", "lastName", "url", "facebook", "linkedIn", "twitter", "email", "optIn", "optInDate", "optInIp", "optInUrl", "pixelFirstHitDate", "pixelLastHitDate", "bebacks", "phone", "dnc", "age", "gender", "maritalStatus", "address", "city", "state", "zip", "householdIncome", "netWorth", "incomeLevels", "peopleInHousehold", "adultsInHousehold", "childrenInHousehold", "veteransInHousehold", "education", "creditRange", "ethnicGroup", "generation", "homeOwner", "occupationDetail", "politicalParty", "religion", "childrenBetweenAges0_3", "childrenBetweenAges4_6", "childrenBetweenAges7_9",
                          "childrenBetweenAges10_12", "childrenBetweenAges13_18", "behaviors", "childrenAgeRanges", "interests", "ownsAmexCard", "ownsBankCard", "dwellingType", "homeHeatType", "homePrice", "homePurchasedYearsAgo", "homeValue", "householdNetWorth", "language", "mortgageAge", "mortgageAmount", "mortgageLoanType", "mortgageRefinanceAge", "mortgageRefinanceAmount", "mortgageRefinanceType", "isMultilingual", "newCreditOfferedHousehold", "numberOfVehiclesInHousehold", "ownsInvestment", "ownsPremiumAmexCard", "ownsPremiumCard", "ownsStocksAndBonds", "personality", "isPoliticalContributor", "isVoter", "premiumIncomeHousehold", "urbanicity", "maid", "maidOs"]
@@ -67,6 +65,16 @@ USERS_FILE_COLUMNS_ORDER = ['date','full_name', 'email','facebook', 'linked_in',
 
 ITEMS_PER_PAGE = 13
 
+AZURE_ACCOUNT_URL = "https://icewebstorage.blob.core.windows.net"
+AZURE_CONNECTION_BLOB_STRING = "zQNgBDFROUur92AMQIDwSoIm3Fswg4rCmjHniH3wvIMLnP8ewXdBISHa1yCxG/obFJHufoAlo/NZ+ASt5bMcvg=="
+AZURE_CONTAINER_NAME = "icewebio"
+
+
+def upload_to_azure_blob(blob_service_client, container_name, content, blob_name):
+    container_client = blob_service_client.get_container_client(container_name)
+    blob_client = container_client.get_blob_client(blob_name)
+
+    blob_client.upload_blob(content, overwrite=True)
 
 
 def query_database(table_name, skip, limit):
@@ -101,6 +109,77 @@ def delete_postgres_table(table_name):
 
     table.drop(ENGINE)
 
+def create_df_file_from_db(company_id,segment_id = None,filters=None):
+    blob_service_client = BlobServiceClient(account_url=AZURE_ACCOUNT_URL, credential=AZURE_CONNECTION_BLOB_STRING)
+
+    # directory_path = f'/companies/{company_id}'
+    file_types = ['users', 'journey']
+
+    if segment_id == None:
+        for file_type in file_types:
+            file_name = f'main-{file_type}.csv'
+            if file_type == 'users':
+                column_names_str = ', '.join(USERS_FILE_COLUMNS_ORDER)
+                query = text(f"SELECT DISTINCT ON (full_name) {column_names_str} FROM {company_id};")
+
+                with ENGINE.connect() as connection:
+                    data = connection.execute(query)
+                
+                df = pd.DataFrame(data, columns=USERS_FILE_COLUMNS_ORDER)
+                
+            if file_type == 'journey':
+                column_names_str = ', '.join(JOURNEY_FILE_COLUMNS_ORDER)
+
+                query = text(f"SELECT {column_names_str} FROM {company_id};")
+
+                with ENGINE.connect() as connection:
+                    data = connection.execute(query)
+                
+                df = pd.DataFrame(data, columns=JOURNEY_FILE_COLUMNS_ORDER)
+                
+            csv_content = df.to_csv(index=False)
+
+            blob_name = f'{company_id}/{file_name}'
+            upload_to_azure_blob(blob_service_client, AZURE_CONTAINER_NAME, io.BytesIO(csv_content.encode()), blob_name)
+
+    else:
+        filter_query = build_filter(company_id,filters)
+        for file_type in file_types:
+            file_name = f'{segment_id}-{file_type}.csv'
+            if file_type == 'users':
+                
+                column_names_str = ', '.join(USERS_FILE_COLUMNS_ORDER)
+                query = text(f"""
+                    SELECT DISTINCT ON (full_name) {column_names_str}
+                    FROM public.{company_id}
+                    WHERE ({filter_query})
+                """)
+
+
+                with ENGINE.connect() as connection:
+                    data = connection.execute(query)
+                
+                df = pd.DataFrame(data, columns=USERS_FILE_COLUMNS_ORDER)
+                
+            if file_type == 'journey':
+                column_names_str = ', '.join(JOURNEY_FILE_COLUMNS_ORDER)
+
+                query = text(f"""
+                    SELECT {column_names_str}
+                    FROM public.{company_id}
+                    WHERE ({filter_query})
+                """)
+
+
+                with ENGINE.connect() as connection:
+                    data = connection.execute(query)
+                
+                df = pd.DataFrame(data, columns=JOURNEY_FILE_COLUMNS_ORDER)
+                
+            csv_content = df.to_csv(index=False)
+
+            blob_name = f'{company_id}/{file_name}'
+            upload_to_azure_blob(blob_service_client, AZURE_CONTAINER_NAME, io.BytesIO(csv_content.encode()), blob_name)
     
 def generate_hashed_id(row):
     # Convert the row to a string and generate a unique hash
@@ -570,126 +649,7 @@ def update_by_percent(company_id):
 
     COMPANIES_COLLECTION.update_one({'_id': company_id}, {'$set': {'by_percent_chart': by_percent_chart}})
 
-def create_df_file_from_db(company_id,segment_id = None,filters=None):
 
-    directory_path = f'/companies/{company_id}'
-    file_types = ['users', 'journey']
-
-    if segment_id == None:
-        for file_type in file_types:
-            file_name = f'main-{file_type}.csv'
-            if file_type == 'users':
-                column_names_str = ', '.join(USERS_FILE_COLUMNS_ORDER)
-                query = text(f"SELECT DISTINCT ON (full_name) {column_names_str} FROM {company_id};")
-
-                os.makedirs(directory_path, exist_ok=True)
-
-                file_path = os.path.join(directory_path, file_name)
-
-                with ENGINE.connect() as connection:
-                    data = connection.execute(query)
-                
-                df = pd.DataFrame(data, columns=USERS_FILE_COLUMNS_ORDER)
-                
-            if file_type == 'journey':
-                column_names_str = ', '.join(JOURNEY_FILE_COLUMNS_ORDER)
-
-                query = text(f"SELECT {column_names_str} FROM {company_id};")
-
-                os.makedirs(directory_path, exist_ok=True)
-
-                file_path = os.path.join(directory_path, file_name)
-
-                with ENGINE.connect() as connection:
-                    data = connection.execute(query)
-                
-                df = pd.DataFrame(data, columns=JOURNEY_FILE_COLUMNS_ORDER)
-                
-            csv_content = df.to_csv(index=False)
-
-            with open(file_path, 'w') as file:
-                file.write(csv_content)
-    else:
-        filter_query = build_filter(company_id,filters)
-        for file_type in file_types:
-            file_name = f'{segment_id}-{file_type}.csv'
-            if file_type == 'users':
-                
-                column_names_str = ', '.join(USERS_FILE_COLUMNS_ORDER)
-                query = text(f"""
-                    SELECT DISTINCT ON (full_name) {column_names_str}
-                    FROM public.{company_id}
-                    WHERE ({filter_query})
-                """)
-
-                os.makedirs(directory_path, exist_ok=True)
-
-                file_path = os.path.join(directory_path, file_name)
-
-                with ENGINE.connect() as connection:
-                    data = connection.execute(query)
-                
-                df = pd.DataFrame(data, columns=USERS_FILE_COLUMNS_ORDER)
-                
-            if file_type == 'journey':
-                column_names_str = ', '.join(JOURNEY_FILE_COLUMNS_ORDER)
-
-                query = text(f"""
-                    SELECT {column_names_str}
-                    FROM public.{company_id}
-                    WHERE ({filter_query})
-                """)
-
-                os.makedirs(directory_path, exist_ok=True)
-
-                file_path = os.path.join(directory_path, file_name)
-
-                with ENGINE.connect() as connection:
-                    data = connection.execute(query)
-                
-                df = pd.DataFrame(data, columns=JOURNEY_FILE_COLUMNS_ORDER)
-                
-            csv_content = df.to_csv(index=False)
-
-            with open(file_path, 'w') as file:
-                file.write(csv_content)
-
-
-
-
-for segment in SEGMENT_COLLECTION.find():
-    scheduler.add_job( 
-                      func=create_df_file_from_db,
-                      trigger=OrTrigger([CronTrigger(hour=19, minute=10)]), 
-                      misfire_grace_time=15*60,
-                      args=[segment['attached_company'],segment['_id'],segment['filters']]
-                    )
-
-for company in COMPANIES_COLLECTION.find():
-    scheduler.add_job(
-        func=create_df_file_from_db,
-        trigger=OrTrigger([CronTrigger(hour=18, minute=0)]), 
-        misfire_grace_time=15*60,
-        args=[company['_id']]
-    )
-    scheduler.add_job(
-        func=update_company_counts,
-        trigger=OrTrigger([CronTrigger(hour=18, minute=30)]), 
-        misfire_grace_time=15*60,
-        args=[company['_id']]
-    )
-    scheduler.add_job(
-        func=update_popular_chart,
-        trigger=OrTrigger([CronTrigger(hour=19, minute=0)]), 
-        misfire_grace_time=15*60,
-        args=[company['_id']]
-    )
-    scheduler.add_job(
-        func=update_by_percent,
-        trigger=OrTrigger([CronTrigger(hour=19, minute=30)]), 
-        misfire_grace_time=15*60,
-        args=[company['_id']]
-    )
 
 
 
@@ -697,7 +657,7 @@ for company in COMPANIES_COLLECTION.find():
 
 @app.route("/api/test", methods=['GET'])
 def tes():
-    create_df_file_from_db('xs581')
+    create_df_file_from_db('xs249')
 
     return jsonify('done!')
 
@@ -711,6 +671,10 @@ def data_changed():
     update_company_counts(company_id)
     update_popular_chart(company_id)
     update_by_percent(company_id)
+
+    segments = SEGMENT_COLLECTION.find({'attached_company'  : company_id})
+    for segment in segments:
+        create_df_file_from_db(company_id,segment["_id"],segment['filters'])
 
     return jsonify('done!')
 
@@ -904,10 +868,6 @@ def delete_segment():
     segment_id = data.get('segment_id')
 
     SEGMENT_COLLECTION.delete_one({'_id': segment_id})
-
-    print(scheduler.get_job(segment_id))
-
-    scheduler.remove_job(segment_id)
 
     return jsonify("done!")
 
@@ -1384,6 +1344,7 @@ def download_users():
 def internal_error(error):
 
     return jsonify("Not Found")
+
 
 # def update_excluded_users(segment_id):
 #     segment = SEGMENT_COLLECTION.find_one({'_id': segment_id})
