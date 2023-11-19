@@ -272,7 +272,7 @@ def get_df_date_query(df, start_date, end_date, search=None):
 
 
 
-def get_date_query(start_date, end_date, search=None):
+def get_date_query(start_date = None, end_date = None, search=None):
     if any([start_date == 'undefined', start_date is None]):
         start_datetime = datetime(datetime.now().year, 1, 1)
         end_datetime = datetime.today()
@@ -701,6 +701,18 @@ def tes():
 
     return jsonify('done!')
 
+
+@app.route("/api/data-changed", methods=['POST'])
+def data_changed():
+    data = request.get_json()
+    company_id = data.get('company_id')
+
+    update_company_counts(company_id)
+    update_popular_chart(company_id)
+    update_by_percent(company_id)
+
+    return jsonify('done!')
+
 @app.route("/api/login", methods=['POST'])
 def login():
     data = request.get_json()
@@ -902,7 +914,6 @@ def delete_segment():
 @app.route("/api/import", methods=['POST'])
 def import_data():
     company_id = request.args.get('id')
-    company_collection = DB_CLIENT[f'{company_id}_data']
     path = '/Users/neevassouline/Desktop/Coding Projects/IcewebIO/backend/data.csv'
 
     df = pd.read_csv(path)
@@ -915,49 +926,11 @@ def import_data():
     df['url'] = df['url'].apply(lambda x: x.replace(
         f'{urlparse(x).scheme}://{urlparse(x).netloc}', ''))
 
-    # Rearrange columns in the desired order
     df_filtered = df[DESIRED_COLUNMS_ORDER]
-    # df_filtered['hashed_id'] = df_filtered.apply(generate_hashed_id, axis=1)
+    df_filtered.to_sql(company_id,ENGINE,if_exists='append',index=False)
+    
 
-    # list_of_lists = df_filtered.to_dict(orient='records')
-    # company_collection.insert_many(list_of_lists)
-    admin_db = DB_CONNECTOR['admin']
-
-    try:
-        shard_key = {"id": "hashed"}
-        admin_db.command("enableSharding", "main")
-        admin_db.command("shardCollection",
-                         f"main.{company_id}_data", key=shard_key)
-    except Exception:
-        print('asd')
-
-    chunk_size = 100
-    num_threads = 4
-    l = len(df_filtered)
-    i = 0
-    threads = []
-
-    while i < l:
-        chunk = df_filtered.iloc[i:i+chunk_size]
-        records = chunk.to_dict('records')
-
-        if len(threads) >= num_threads:
-            # Wait for running threads to complete
-            for thread in threads:
-                thread.join()
-            threads = []
-
-        thread = threading.Thread(
-            target=insert_chunk, args=(company_collection, records))
-        thread.start()
-        threads.append(thread)
-
-        i += chunk_size
-
-    # Wait for any remaining threads to complete
-    for thread in threads:
-        thread.join()
-
+    
     return jsonify('Done!')
 
 
