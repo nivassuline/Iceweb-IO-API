@@ -8,3 +8,4 @@ PyJWT
 APScheduler
 psycopg2
 sqlalchemy
+azure-storage-blob
