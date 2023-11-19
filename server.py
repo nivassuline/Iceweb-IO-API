@@ -1135,7 +1135,7 @@ def get_by_precent_counts():
         try:
             if any([start_date == 'undefined', start_date == None]):
                 company = COMPANIES_COLLECTION.find_one({'_id': company_id})
-                by_precent_chart = company['by_precent_chart'][field]
+                by_precent_chart = company['by_percent_chart'][field]
                 response = {
                     'items': by_precent_chart['item_list'],
                     'counts': by_precent_chart['count_list']
@@ -1143,14 +1143,13 @@ def get_by_precent_counts():
             else:
                 date_range_query = get_date_query(start_date, end_date)
 
-
                 item_list, count_list = get_by_precent_count(company_id,field,date_range_query)
 
                 response = {
                     'items': item_list,
                     'counts': count_list
                 }
-        except KeyError:
+        except KeyError as e:
             response = {
                     'items': [],
                     'counts': []
@@ -1344,7 +1343,6 @@ def download_users():
 def internal_error(error):
 
     return jsonify("Not Found")
-
 
 # def update_excluded_users(segment_id):
 #     segment = SEGMENT_COLLECTION.find_one({'_id': segment_id})
