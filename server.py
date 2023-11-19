@@ -707,6 +707,7 @@ def data_changed():
     data = request.get_json()
     company_id = data.get('company_id')
 
+    create_df_file_from_db(company_id)
     update_company_counts(company_id)
     update_popular_chart(company_id)
     update_by_percent(company_id)
@@ -1383,7 +1384,6 @@ def download_users():
 def internal_error(error):
 
     return jsonify("Not Found")
-
 
 # def update_excluded_users(segment_id):
 #     segment = SEGMENT_COLLECTION.find_one({'_id': segment_id})
