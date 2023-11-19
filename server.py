@@ -976,14 +976,23 @@ def get_company_list():
             id = id.lower()
             company = COMPANIES_COLLECTION.find_one({"_id": id})
             if company:
-                counts = company['counts']
-                companies.append({
-                    "company_details": company,
-                    "counts": {
-                        "journey_count": counts['journey_count'],
-                        "people_count": counts['people_count']
-                    }
-                })
+                try:
+                    counts = company['counts']
+                    companies.append({
+                        "company_details": company,
+                        "counts": {
+                            "journey_count": counts['journey_count'],
+                            "people_count": counts['people_count']
+                        }
+                    })
+                except KeyError:
+                    companies.append({
+                        "company_details": company,
+                        "counts": {
+                            "journey_count": 0,
+                            "people_count": 0
+                        }
+                    })
 
         return jsonify(companies), 200
     except jwt.ExpiredSignatureError:
@@ -1146,24 +1155,29 @@ def get_company_counts():
         end_date = request.json.get('end_date')
 
         company_collection = DB_CLIENT[f'{company_id}_data']
+        try:
 
-        if any([start_date == 'undefined', start_date == None]):
-            company = COMPANIES_COLLECTION.find_one({'_id': company_id})
-            counts = company['counts']
-            response = {
-                'people_count': counts['people_count'],
-                'journey_count': counts['journey_count'],
-            }
-        else:
-            date_range_query = get_date_query(start_date, end_date)
+            if any([start_date == 'undefined', start_date == None]):
+                company = COMPANIES_COLLECTION.find_one({'_id': company_id})
+                counts = company['counts']
+                response = {
+                    'people_count': counts['people_count'],
+                    'journey_count': counts['journey_count'],
+                }
+            else:
+                date_range_query = get_date_query(start_date, end_date)
 
-            journey_count, people_count = get_counts(company_id,date_range_query)
+                journey_count, people_count = get_counts(company_id,date_range_query)
 
-            response = {
-                'people_count': people_count,
-                'journey_count': journey_count,
-            }
-
+                response = {
+                    'people_count': people_count,
+                    'journey_count': journey_count,
+                }
+        except KeyError:
+                response = {
+                    'people_count': 0,
+                    'journey_count': 0,
+                }
         return jsonify(response), 200
     except jwt.ExpiredSignatureError:
         return jsonify({"error": "Token has expired"}), 401
@@ -1183,24 +1197,30 @@ def get_by_precent_counts():
         start_date = request.json.get('start_date')
         end_date = request.json.get('end_date')
         field = request.json.get('field')
+        
+        try:
+            if any([start_date == 'undefined', start_date == None]):
+                company = COMPANIES_COLLECTION.find_one({'_id': company_id})
+                by_precent_chart = company['by_precent_chart'][field]
+                response = {
+                    'items': by_precent_chart['item_list'],
+                    'counts': by_precent_chart['count_list']
+                }
+            else:
+                date_range_query = get_date_query(start_date, end_date)
 
-        if any([start_date == 'undefined', start_date == None]):
-            company = COMPANIES_COLLECTION.find_one({'_id': company_id})
-            by_precent_chart = company['by_precent_chart'][field]
+
+                item_list, count_list = get_by_precent_count(company_id,field,date_range_query)
+
+                response = {
+                    'items': item_list,
+                    'counts': count_list
+                }
+        except KeyError:
             response = {
-                'items': by_precent_chart['item_list'],
-                'counts': by_precent_chart['count_list']
-            }
-        else:
-            date_range_query = get_date_query(start_date, end_date)
-
-
-            item_list, count_list = get_by_precent_count(company_id,field,date_range_query)
-
-            response = {
-                'items': item_list,
-                'counts': count_list
-            }
+                    'items': [],
+                    'counts': []
+                }
 
         return jsonify(response), 200
 
@@ -1226,23 +1246,29 @@ def get_company_popular():
         end_date = request.json.get('end_date')
         popular_type = request.json.get('type')
 
-        if any([start_date == 'undefined', start_date == None]):  
-            company = COMPANIES_COLLECTION.find_one({'_id': company_id})
-            popular_chart = company["popular_chart"][popular_type]
+        try:
+            if any([start_date == 'undefined', start_date == None]):  
+                company = COMPANIES_COLLECTION.find_one({'_id': company_id})
+                popular_chart = company["popular_chart"][popular_type]
 
+                response = {
+                    'popular_items': popular_chart['item_list'],
+                    'popular_items_counts': popular_chart['count_list']
+                }
+            else:
+                date_range_query = get_date_query(start_date, end_date)
+
+                popular_items, popular_items_counts = get_most_popular(company_id,date_range_query,popular_type)
+
+                response = {
+                    'popular_items': popular_items,
+                    'popular_items_counts': popular_items_counts
+                }
+        except KeyError:
             response = {
-                'popular_items': popular_chart['item_list'],
-                'popular_items_counts': popular_chart['count_list']
-            }
-        else:
-            date_range_query = get_date_query(start_date, end_date)
-
-            popular_items, popular_items_counts = get_most_popular(company_id,date_range_query,popular_type)
-
-            response = {
-                'popular_items': popular_items,
-                'popular_items_counts': popular_items_counts
-            }
+                    'popular_items': [],
+                    'popular_items_counts': []
+                }
 
         return jsonify(response), 200
     except jwt.ExpiredSignatureError:
@@ -1384,6 +1410,7 @@ def download_users():
 def internal_error(error):
 
     return jsonify("Not Found")
+
 
 # def update_excluded_users(segment_id):
 #     segment = SEGMENT_COLLECTION.find_one({'_id': segment_id})
