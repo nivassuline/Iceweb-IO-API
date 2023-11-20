@@ -59,6 +59,8 @@ DESIRED_COLUNMS_ORDER = ["date", "id", "hour", "fullName", "firstName", "lastNam
 COLUMNS_ORDER = ['date', 'url', 'full_name', 'first_name', 'last_name', 'facebook', 'linked_in', 'twitter', 'email', 'opt_in', 'opt_in_date', 'opt_in_ip', 'opt_in_url', 'pixel_first_hit_date', 'pixel_last_hit_date', 'bebacks', 'phone', 'dnc', 'age', 'gender', 'marital_status', 'address', 'city', 'state', 'zip', 'household_income', 'net_worth', 'income_levels', 'people_in_household', 'adults_in_household', 'children_in_household', 'veterans_in_household', 'education', 'credit_range', 'ethnic_group', 'generation', 'home_owner', 'occupation_detail', 'political_party', 'religion', 'children_between_ages0_3', 'children_between_ages4_6', 'children_between_ages7_9', 'children_between_ages10_12', 'children_between_ages13_18', 'behaviors', 'children_age_ranges', 'interests', 'owns_amex_card', 'owns_bank_card', 'dwelling_type', 'home_heat_type', 'home_price', 'home_purchased_years_ago', 'home_value', 'household_net_worth', 'language', 'mortgage_age', 'mortgage_amount', 'mortgage_loan_type', 'mortgage_refinance_age', 'mortgage_refinance_amount', 'mortgage_refinance_type', 'is_multilingual', 'new_credit_offered_household', 'number_of_vehicles_in_household', 'owns_investment', 'owns_premium_amex_card', 'owns_premium_card', 'owns_stocks_and_bonds', 'personality', 'is_political_contributor', 'is_voter', 'premium_income_household', 'urbanicity', 'maid', 'maid_os', 'hour']
 
 
+desired_columns_order_journey = ['date','hour',"url","full_name","firstName","lastName","facebook","linkedIn","twitter","email","optIn","optInDate","optInIp","optInUrl","pixelFirstHitDate","pixelLastHitDate","bebacks","phone","dnc","age","gender","maritalStatus","address","city","state","zip","householdIncome","netWorth","incomeLevels","peopleInHousehold","adultsInHousehold","childrenInHousehold","veteransInHousehold","education","creditRange","ethnicGroup","generation","homeOwner","occupationDetail","politicalParty","religion","childrenBetweenAges0_3","childrenBetweenAges4_6","childrenBetweenAges7_9","childrenBetweenAges10_12","childrenBetweenAges13_18","behaviors","childrenAgeRanges","interests","ownsAmexCard","ownsBankCard","dwellingType","homeHeatType","homePrice","homePurchasedYearsAgo","homeValue","householdNetWorth","language","mortgageAge","mortgageAmount","mortgageLoanType","mortgageRefinanceAge","mortgageRefinanceAmount","mortgageRefinanceType","isMultilingual","newCreditOfferedHousehold","numberOfVehiclesInHousehold","ownsInvestment","ownsPremiumAmexCard","ownsPremiumCard","ownsStocksAndBonds","personality","isPoliticalContributor","isVoter","premiumIncomeHousehold","urbanicity","maid","maidOs"] 
+
 JOURNEY_FILE_COLUMNS_ORDER = ['date', 'hour','full_name','url', 'facebook', 'linked_in', 'twitter', 'email', 'opt_in', 'opt_in_date', 'opt_in_ip', 'opt_in_url', 'pixel_first_hit_date', 'pixel_last_hit_date', 'bebacks', 'phone', 'dnc', 'age', 'gender', 'marital_status', 'address', 'city', 'state', 'zip', 'household_income', 'net_worth', 'income_levels', 'people_in_household', 'adults_in_household', 'children_in_household', 'veterans_in_household', 'education', 'credit_range', 'ethnic_group', 'generation', 'home_owner', 'occupation_detail', 'political_party', 'religion', 'children_between_ages0_3', 'children_between_ages4_6', 'children_between_ages7_9', 'children_between_ages10_12', 'children_between_ages13_18', 'behaviors', 'children_age_ranges', 'interests', 'owns_amex_card', 'owns_bank_card', 'dwelling_type', 'home_heat_type', 'home_price', 'home_purchased_years_ago', 'home_value', 'household_net_worth', 'language', 'mortgage_age', 'mortgage_amount', 'mortgage_loan_type', 'mortgage_refinance_age', 'mortgage_refinance_amount', 'mortgage_refinance_type', 'is_multilingual', 'new_credit_offered_household', 'number_of_vehicles_in_household', 'owns_investment', 'owns_premium_amex_card', 'owns_premium_card', 'owns_stocks_and_bonds', 'personality', 'is_political_contributor', 'is_voter', 'premium_income_household', 'urbanicity', 'maid', 'maid_os']
 
 USERS_FILE_COLUMNS_ORDER = ['date','full_name', 'email','facebook', 'linked_in', 'twitter', 'opt_in', 'opt_in_date', 'opt_in_ip', 'opt_in_url', 'pixel_first_hit_date', 'pixel_last_hit_date', 'bebacks', 'phone', 'dnc', 'age', 'gender', 'marital_status', 'address', 'city', 'state', 'zip', 'household_income', 'net_worth', 'income_levels', 'people_in_household', 'adults_in_household', 'children_in_household', 'veterans_in_household', 'education', 'credit_range', 'ethnic_group', 'generation', 'home_owner', 'occupation_detail', 'political_party', 'religion', 'children_between_ages0_3', 'children_between_ages4_6', 'children_between_ages7_9', 'children_between_ages10_12', 'children_between_ages13_18', 'behaviors', 'children_age_ranges', 'interests', 'owns_amex_card', 'owns_bank_card', 'dwelling_type', 'home_heat_type', 'home_price', 'home_purchased_years_ago', 'home_value', 'household_net_worth', 'language', 'mortgage_age', 'mortgage_amount', 'mortgage_loan_type', 'mortgage_refinance_age', 'mortgage_refinance_amount', 'mortgage_refinance_type', 'is_multilingual', 'new_credit_offered_household', 'number_of_vehicles_in_household', 'owns_investment', 'owns_premium_amex_card', 'owns_premium_card', 'owns_stocks_and_bonds', 'personality', 'is_political_contributor', 'is_voter', 'premium_income_household', 'urbanicity']
@@ -68,6 +70,17 @@ ITEMS_PER_PAGE = 13
 AZURE_ACCOUNT_URL = "https://icewebstorage.blob.core.windows.net"
 AZURE_CONNECTION_BLOB_STRING = "zQNgBDFROUur92AMQIDwSoIm3Fswg4rCmjHniH3wvIMLnP8ewXdBISHa1yCxG/obFJHufoAlo/NZ+ASt5bMcvg=="
 AZURE_CONTAINER_NAME = "icewebio"
+
+
+    # Function to convert camelCase to snake_case
+def camel_to_snake(column_name):
+        result = [column_name[0].lower()]
+        for char in column_name[1:]:
+            if char.isupper():
+                result.extend(['_', char.lower()])
+            else:
+                result.append(char)
+        return ''.join(result)
 
 
 def upload_to_azure_blob(blob_service_client, container_name, content, blob_name):
@@ -219,7 +232,35 @@ def convert_to_user_friendly_time(hour_str):
         return "12 AM"
     else:
         return "Invalid Hour"
+    
+def convert_to_user_friendly_age(age_str):
+    print('did')
+    # Convert the hour string to an integer
+    age = float(age_str)
 
+    if 0 <= age <= 9:
+        return f"0 - 9"
+    elif 10 <= age <= 19:
+        return "10 - 19"
+    elif 20 <= age <= 29:
+        return "20 - 29"
+    elif 30 <= age <= 39:
+        return "30 - 39"
+    elif 40 <= age <= 49:
+        return "40 - 49"
+    elif 50 <= age <= 59:
+        return "50 - 59"
+    elif 60 <= age <= 69:
+        return "60 - 69"
+    elif 70 <= age <= 79:
+        return "70 - 79"
+    elif 80 <= age <= 89:
+        return "80 - 89"
+    elif 90 <= age <= 99:
+        return "90 - 99"
+    elif age >= 100:
+        return "100+"
+    
 def get_most_popular(table_name, date_range_query, popular_type):
     item_list = []
     count_list = []
@@ -265,14 +306,43 @@ def get_by_precent_count(table_name, field, date_range_query):
     count_list = []
 
     with ENGINE.connect() as connection:
-        query = text(f"""
-            SELECT {field} as item, COUNT(*) as count
-            FROM {table_name}
-            WHERE {date_range_query}
-            GROUP BY {field}
-            ORDER BY count DESC
-            LIMIT 10
-        """)
+        if field == 'age':
+            query = text(f"""
+                SELECT
+                    CASE
+                        WHEN age = '-' THEN 'Unknown'
+                        WHEN age::float < 10 THEN '0-10'
+                        WHEN age::float < 20 THEN '10-20'
+                        WHEN age::float < 30 THEN '20-30'
+                        WHEN age::float < 40 THEN '30-40'
+                        WHEN age::float < 50 THEN '40-50'
+                        WHEN age::float < 60 THEN '50-60'
+                        WHEN age::float < 70 THEN '60-70'
+                        WHEN age::float < 80 THEN '70-80'
+                        WHEN age::float < 90 THEN '80-90'
+                        ELSE 'Unknown'
+                    END AS age_range,
+                    COUNT(*) AS count
+                FROM
+                    {table_name}
+                WHERE
+                    {date_range_query} -- Replace with your actual date range condition
+                GROUP BY
+                    age_range
+                ORDER BY
+                    count DESC
+                LIMIT 10;
+
+            """)
+        else:
+            query = text(f"""
+                SELECT {field} as item, COUNT(*) as count
+                FROM {table_name}
+                WHERE {date_range_query}
+                GROUP BY {field}
+                ORDER BY count DESC
+                LIMIT 10
+            """)
 
         result = connection.execute(query)
 
@@ -592,6 +662,13 @@ def update_popular_chart(company_id):
                     ORDER BY count DESC
                     LIMIT 10
                 """)
+
+                result = connection.execute(query).fetchall()
+
+                for item in result:
+                    item_list.append(convert_to_user_friendly_time(item[0]))
+                    count_list.append(item[1])
+
             elif popular_type == 'url':
                 query = text(f"""
                     SELECT url,
@@ -602,11 +679,12 @@ def update_popular_chart(company_id):
                     LIMIT 10
                 """)
 
-            result = connection.execute(query).fetchall()
+                result = connection.execute(query).fetchall()
 
-            for item in result:
-                item_list.append(item[0])
-                count_list.append(item[1])
+                for item in result:
+                    item_list.append(item[0])
+                    count_list.append(item[1])
+
 
             popular_chart[popular_type] = {
                 'item_list': item_list,
@@ -623,15 +701,41 @@ def update_by_percent(company_id):
         for field in fields:
             item_list = []
             count_list = []
-
-            query = text(f"""
-                SELECT {field},
-                       COUNT(*) AS count
-                FROM {company_id}
-                GROUP BY {field}
-                ORDER BY count DESC
-                LIMIT 10
-            """)
+            
+            if field == 'age':
+                query = text(f"""
+                    SELECT
+                    CASE
+                        WHEN age = '-' THEN 'Unknown'
+                        WHEN age::float < 10 THEN '0-10'
+                        WHEN age::float < 20 THEN '10-20'
+                        WHEN age::float < 30 THEN '20-30'
+                        WHEN age::float < 40 THEN '30-40'
+                        WHEN age::float < 50 THEN '40-50'
+                        WHEN age::float < 60 THEN '50-60'
+                        WHEN age::float < 70 THEN '60-70'
+                        WHEN age::float < 80 THEN '70-80'
+                        WHEN age::float < 90 THEN '80-90'
+                        ELSE 'Unknown'
+                    END AS age_range,
+                    COUNT(*) AS count
+                FROM
+                    {company_id}
+                GROUP BY
+                    age_range
+                ORDER BY
+                    count DESC
+                LIMIT 10;
+                    """)
+            else:
+                query = text(f"""
+                    SELECT {field},
+                            COUNT(*) AS count
+                    FROM {company_id}
+                    GROUP BY {field}
+                    ORDER BY count DESC
+                    LIMIT 10
+                """)
 
             result = connection.execute(query).fetchall()
 
@@ -883,11 +987,12 @@ def import_data():
     df["date"] = pd.to_datetime(df["date"])
     df['hour'] = df['date'].dt.strftime('%H:%M:%S')
     df['date'] = df['date'].dt.strftime('%Y-%m-%d')
-    df['fullName'] = df['firstName'] + ' ' + df['lastName']
+    df['full_name'] = df['firstName'] + ' ' + df['lastName']
     df['url'] = df['url'].apply(lambda x: x.replace(
         f'{urlparse(x).scheme}://{urlparse(x).netloc}', ''))
-
-    df_filtered = df[DESIRED_COLUNMS_ORDER]
+    
+    df_filtered = df[desired_columns_order_journey]
+    df_filtered = df_filtered.rename(columns=lambda x: camel_to_snake(x))
     df_filtered.to_sql(company_id,ENGINE,if_exists='append',index=False)
     
 
