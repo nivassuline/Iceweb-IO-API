@@ -21,12 +21,18 @@ from sqlalchemy import create_engine, text, MetaData, Table, Column, Text
 import os
 from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
 import io
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.combining import OrTrigger
+from apscheduler.triggers.cron import CronTrigger
+import apscheduler.jobstores.base
 
 
 
 app = Flask(__name__)
 CORS(app)
 bcrypt = Bcrypt(app)
+scheduler = BackgroundScheduler()
+scheduler.start()
 
 
 
@@ -88,6 +94,28 @@ def upload_to_azure_blob(blob_service_client, container_name, content, blob_name
     blob_client = container_client.get_blob_client(blob_name)
 
     blob_client.upload_blob(content, overwrite=True)
+
+def delete_from_azure_blob(container_name,company_id, blob_name):
+    blob_service_client = BlobServiceClient(account_url=AZURE_ACCOUNT_URL, credential=AZURE_CONNECTION_BLOB_STRING)
+    container_client = blob_service_client.get_container_client(container_name)
+
+    print('aff')
+    
+    try:
+        # List all blobs in the container
+        blobs = container_client.walk_blobs(name_starts_with=f"{company_id}/")
+
+        print(blobs)
+
+        # Iterate through the blobs and delete those with the specified prefix
+        for blob in blobs:
+            print(blob)
+            if blob_name in blob.name:
+                blob_client = container_client.get_blob_client(blob.name)
+                blob_client.delete_blob()
+                print(f"Blob {blob.name} deleted successfully.")
+    except Exception as e:
+        print(f"Error deleting blobs {blob_name}: {str(e)}")
 
 
 def query_database(table_name, skip, limit):
@@ -193,6 +221,7 @@ def create_df_file_from_db(company_id,segment_id = None,filters=None):
 
             blob_name = f'{company_id}/{file_name}'
             upload_to_azure_blob(blob_service_client, AZURE_CONTAINER_NAME, io.BytesIO(csv_content.encode()), blob_name)
+            print('uploaded!')
     
 def generate_hashed_id(row):
     # Convert the row to a string and generate a unique hash
@@ -234,7 +263,6 @@ def convert_to_user_friendly_time(hour_str):
         return "Invalid Hour"
     
 def convert_to_user_friendly_age(age_str):
-    print('did')
     # Convert the hour string to an integer
     age = float(age_str)
 
@@ -278,7 +306,6 @@ def get_most_popular(table_name, date_range_query, popular_type):
             result = connection.execute(query)
 
             for row in result:
-                print(row[0])
                 item_list.append(convert_to_user_friendly_time(row[0]))
                 count_list.append(row[1])
 
@@ -295,7 +322,6 @@ def get_most_popular(table_name, date_range_query, popular_type):
             result = connection.execute(query)
 
             for row in result:
-                print(row[0])
                 item_list.append(row[0])
                 count_list.append(row[1])
 
@@ -394,7 +420,6 @@ def get_counts(table_name, date_range_query, filter_query=None):
     return journey_count, people_count
 
 def get_df_date_query(df, start_date, end_date, search=None):
-    print(start_date, end_date)
     # Assume df is your Pandas DataFrame containing the 'date' column
     if start_date in ['undefined', None]:
         start_datetime_to_obj = datetime.today()
@@ -433,8 +458,6 @@ def get_date_query(start_date = None, end_date = None, search=None):
     # Format the datetime objects as strings
     start_date_str = start_datetime.strftime('%Y-%m-%d')
     end_date_str = end_datetime.strftime('%Y-%m-%d')
-
-    print(start_date_str)
 
 
     # Create a query to find documents within the specified date range
@@ -589,7 +612,6 @@ def build_filter(company_id,filter_params=None, column_filters=None):
                 value_arr = filter_value['value']
                 or_arr = []
 
-                print('chekcvox')
                 for value in value_arr:
                     or_arr.append(text(f"{column_name} = '{value}'"))
 
@@ -634,9 +656,6 @@ def update_company_counts(company_id):
         except IndexError:
             people_count = 0
             journey_count = 0
-        
-        print(journey_count)
-        print(people_count)
 
         COMPANIES_COLLECTION.update_one({'_id': company_id}, {'$set' : {'counts' : {
             "people_count" : people_count,
@@ -927,7 +946,12 @@ def add_segment():
 
         SEGMENT_COLLECTION.insert_one(new_segment)
 
-        create_df_file_from_db(company_id,segment_id,filters)
+        job = scheduler.add_job(func=create_df_file_from_db, misfire_grace_time=15*60,
+                            args=[company_id,segment_id,filters])
+        
+        job.modify(next_run_time=datetime.now())
+
+        # create_df_file_from_db(company_id,segment_id,filters)
 
         return jsonify('Done!')
     except jwt.ExpiredSignatureError:
@@ -971,7 +995,11 @@ def delete_segment():
 
     segment_id = data.get('segment_id')
 
-    SEGMENT_COLLECTION.delete_one({'_id': segment_id})
+    segment = SEGMENT_COLLECTION.find_one_and_delete({'_id': segment_id})
+
+    # blob_name = f'{segment["attached_company"]}/{segment_id}'
+
+    delete_from_azure_blob(AZURE_CONTAINER_NAME,segment["attached_company"],segment_id)
 
     return jsonify("done!")
 
@@ -1081,9 +1109,7 @@ def get_segment_list():
 
         for segment in segments:
             filter_query = build_filter(company_id,segment["filters"])
-            print(filter_query)
             people_count = get_counts(company_id,get_date_query(None,None),filter_query=filter_query)[1]
-            print(people_count)
             segment_list.append({
                 "segment_id": segment["_id"],
                 "segment_name": segment["segment_name"],
@@ -1147,8 +1173,6 @@ def get_data():
             WHERE ({date_range_query} AND {filter_query})
             LIMIT {ITEMS_PER_PAGE} OFFSET {skip}
         """)
-
-        print(str(query))
 
     # query = text(f"SELECT * FROM {company_id} LIMIT {ITEMS_PER_PAGE} OFFSET {skip};")
 
@@ -1349,17 +1373,14 @@ def update_company():
 
         if result:
             for user_email in new_company_data.get('attached_users', []):
-                print(user_email)
                 USER_COLLECTION.update_one({"user_email": user_email}, {
                                            "$addToSet": {"companies": company_id}})
             for user_email in old_company["attached_users"]:
-                print(user_email)
                 if user_email not in new_company_data.get('attached_users', []):
                     USER_COLLECTION.update_one({'user_email': user_email}, {
                                                '$pull': {'companies': company_id}})
             return jsonify({"message": "Company updated successfully"})
         else:
-            print('no')
             return jsonify({"error": "No company updated"}), 404
 
     except jwt.ExpiredSignatureError:
@@ -1377,7 +1398,6 @@ def update_segment():
         data = request.get_json()
         segment_id = data.get("segment_id")
         new_segment_data = data.get("new_segment_data")
-        print(new_segment_data)
 
         SEGMENT_COLLECTION.update_one(
             {"_id": segment_id}, {'$set': new_segment_data})
@@ -1435,7 +1455,6 @@ def download_users():
 
     df = pd.read_csv(csv_file_path)
     df = get_df_date_query(df,start_date,end_date)
-    print(df)
     # Create a response with the CSV data
     response = make_response(df.to_csv(index=False))
     response.headers["Content-Disposition"] = f"attachment; filename={download_file_name}.csv"
