@@ -1138,6 +1138,7 @@ def get_data():
     page = data.get('page')
     column_filters = data.get('column_filter')
     filters = data.get('filters')
+    data_type = data.get('data_type')
 
 
     try:
@@ -1163,16 +1164,27 @@ def get_data():
     date_range_query = get_date_query(start_date,end_date)
 
     if filter_query is None:
-        query = text(f"SELECT * FROM {company_id} WHERE ({date_range_query}) LIMIT {ITEMS_PER_PAGE} OFFSET {skip};")
-    else:
+        if data_type == 'users':
+            query = text(f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE ({date_range_query}) LIMIT {ITEMS_PER_PAGE} OFFSET {skip};")
+        else:
+            query = text(f"SELECT  * FROM {company_id} WHERE ({date_range_query}) LIMIT {ITEMS_PER_PAGE} OFFSET {skip};")
 
-        # Final query
-        query = text(f"""
-            SELECT *
-            FROM public.{company_id}
-            WHERE ({date_range_query} AND {filter_query})
-            LIMIT {ITEMS_PER_PAGE} OFFSET {skip}
-        """)
+    else:
+        if data_type == 'users':
+            # Final query
+            query = text(f"""
+                SELECT DISTINCT ON (full_name) *
+                FROM public.{company_id}
+                WHERE ({date_range_query} AND {filter_query})
+                LIMIT {ITEMS_PER_PAGE} OFFSET {skip}
+            """)
+        else:
+            query = text(f"""
+                SELECT *
+                FROM public.{company_id}
+                WHERE ({date_range_query} AND {filter_query})
+                LIMIT {ITEMS_PER_PAGE} OFFSET {skip}
+            """)
 
     # query = text(f"SELECT * FROM {company_id} LIMIT {ITEMS_PER_PAGE} OFFSET {skip};")
 
@@ -1203,6 +1215,68 @@ def get_user_details():
         return jsonify({"error": "Token has expired"}), 401
     except jwt.DecodeError as e:
         return jsonify({"error": "Invalid token"}), 401
+    
+@app.route("/api/get-user-journey", methods=['POST'])
+def get_user_journey():
+    data = request.get_json()
+    company_id = data.get('id').lower()
+    user_name= data.get('user_name')
+    start_date = data.get('start-date')
+    end_date = data.get('end-date')
+    filters = data.get('filters')
+
+    filter_query = build_filter(company_id,filters)
+
+    date_range_query = get_date_query(start_date,end_date)
+
+    query = text(f"""
+        SELECT 
+            date,
+            full_name,
+            url,
+            opt_in_ip,
+            hour,
+            -- Extract parameters and remove them from the url
+            REGEXP_REPLACE(url, '\\?.*', '') AS url_without_params,
+            -- Extract parameters into a list
+            STRING_TO_ARRAY(REGEXP_REPLACE(url, '.*\\?', ''), '&') AS parameters_list
+        FROM {company_id}
+        WHERE full_name = '{user_name}'
+        ORDER BY 
+            TO_DATE(date, 'YYYY-MM-DD') ASC,
+            TO_TIMESTAMP(hour, 'HH24:MI:SS') ASC;
+    """)
+
+    with ENGINE.connect() as connection:
+        data = connection.execute(query)
+
+    # Organize the data by date
+    organized_data = {}
+    for row in data:
+        date = row[0]  # Assuming 'date' is the name of your date column
+        document = {
+            'full_name': row[1],
+            'url': row[2],
+            'opt_in_ip': row[3],
+            'hour': row[4],
+            'url_without_params': row[5],
+            'parameters_list': row[6]
+        }
+
+        # Append the document to the list for the corresponding date
+        if date in organized_data:
+            organized_data[date].append(document)
+        else:
+            organized_data[date] = [document]
+
+    # Convert the organized data to a list for jsonify
+    result = [{'date': date, 'documents': documents} for date, documents in organized_data.items()]
+
+    return jsonify(result)
+
+
+
+
 
 
 @app.route("/api/get-company-counts", methods=['POST'])
