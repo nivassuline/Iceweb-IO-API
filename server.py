@@ -289,7 +289,7 @@ def convert_to_user_friendly_age(age_str):
     elif age >= 100:
         return "100+"
     
-def get_most_popular(table_name, date_range_query, popular_type):
+def get_most_popular(table_name, date_range_query, popular_type, state=None):
     item_list = []
     count_list = []
 
@@ -309,6 +309,34 @@ def get_most_popular(table_name, date_range_query, popular_type):
                 item_list.append(convert_to_user_friendly_time(row[0]))
                 count_list.append(row[1])
 
+        elif popular_type == 'state':
+            query = text(f"""
+                SELECT {popular_type} as item, COUNT(*) as count
+                FROM {table_name}
+                WHERE {date_range_query}
+                GROUP BY {popular_type}
+                ORDER BY count DESC
+                """)
+
+            result = connection.execute(query)
+
+            for row in result:
+                item_list.append(row[0])
+                count_list.append(row[1])
+        elif popular_type == 'city':
+            query = text(f"""
+                SELECT {popular_type} as item, COUNT(*) as count
+                FROM {table_name}
+                WHERE {date_range_query} AND state = '{state}'
+                GROUP BY {popular_type}
+                ORDER BY count DESC
+                """)
+
+            result = connection.execute(query)
+
+            for row in result:
+                item_list.append(row[0])
+                count_list.append(row[1])
         else:
             query = text(f"""
                 SELECT {popular_type} as item, COUNT(*) as count
@@ -1277,6 +1305,18 @@ def get_user_journey():
 
 
 
+@app.route("/api/get-geo-data", methods=['POST'])
+def get_geo_data():
+    data = request.get_json()
+    company_id = data.get('id').lower()
+    user_name= data.get('user_name')
+    start_date = data.get('start-date')
+    end_date = data.get('end-date')
+
+    date_range_query = get_date_query(start_date,end_date)
+
+    popular_states, popular_states_counts = get_most_popular(company_id, date_range_query, 'state')
+
 
 
 @app.route("/api/get-company-counts", methods=['POST'])
@@ -1381,20 +1421,23 @@ def get_company_popular():
         start_date = request.json.get('start_date')
         end_date = request.json.get('end_date')
         popular_type = request.json.get('type')
+        state = request.json.get('state')
 
         try:
-            if any([start_date == 'undefined', start_date == None]):  
-                company = COMPANIES_COLLECTION.find_one({'_id': company_id})
-                popular_chart = company["popular_chart"][popular_type]
+            # if any([start_date == 'undefined', start_date == None]):  
+            #     company = COMPANIES_COLLECTION.find_one({'_id': company_id})
+            #     popular_chart = company["popular_chart"][popular_type]
 
-                response = {
-                    'popular_items': popular_chart['item_list'],
-                    'popular_items_counts': popular_chart['count_list']
-                }
-            else:
+            #     response = {
+            #         'popular_items': popular_chart['item_list'],
+            #         'popular_items_counts': popular_chart['count_list']
+            #     }
+            # else:
                 date_range_query = get_date_query(start_date, end_date)
 
-                popular_items, popular_items_counts = get_most_popular(company_id,date_range_query,popular_type)
+                popular_items, popular_items_counts = get_most_popular(company_id,date_range_query,popular_type,state)
+
+                print(popular_items_counts)
 
                 response = {
                     'popular_items': popular_items,
@@ -1541,6 +1584,7 @@ def download_users():
 def internal_error(error):
 
     return jsonify("Not Found")
+
 
 # def update_excluded_users(segment_id):
 #     segment = SEGMENT_COLLECTION.find_one({'_id': segment_id})
