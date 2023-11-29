@@ -1914,7 +1914,10 @@ def download_users():
 @app.errorhandler(500)
 def internal_error(error):
 
+    print(error)
+    
     return jsonify("Not Found")
+
 
 # def update_excluded_users(segment_id):
 #     segment = SEGMENT_COLLECTION.find_one({'_id': segment_id})
