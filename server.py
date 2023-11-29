@@ -1479,6 +1479,7 @@ def get_data():
     column_filters = data.get('column_filter')
     filters = data.get('filters')
     data_type = data.get('data_type')
+    full_data = data.get('full_data')
 
 
     try:
@@ -1510,21 +1511,36 @@ def get_data():
             query = text(f"SELECT  * FROM {company_id} WHERE ({date_range_query}) LIMIT {ITEMS_PER_PAGE} OFFSET {skip};")
 
     else:
-        if data_type == 'users':
-            # Final query
-            query = text(f"""
-                SELECT DISTINCT ON (full_name) *
-                FROM public.{company_id}
-                WHERE ({date_range_query} AND {filter_query})
-                LIMIT {ITEMS_PER_PAGE} OFFSET {skip}
-            """)
+        if full_data:
+            if data_type == 'users':
+                # Final query
+                query = text(f"""
+                    SELECT DISTINCT ON (full_name) *
+                    FROM public.{company_id}
+                    WHERE ({date_range_query} AND {filter_query})
+                """)
+            else:
+                query = text(f"""
+                    SELECT *
+                    FROM public.{company_id}
+                    WHERE ({date_range_query} AND {filter_query})
+                """)
         else:
-            query = text(f"""
-                SELECT *
-                FROM public.{company_id}
-                WHERE ({date_range_query} AND {filter_query})
-                LIMIT {ITEMS_PER_PAGE} OFFSET {skip}
-            """)
+            if data_type == 'users':
+                # Final query
+                query = text(f"""
+                    SELECT DISTINCT ON (full_name) *
+                    FROM public.{company_id}
+                    WHERE ({date_range_query} AND {filter_query})
+                    LIMIT {ITEMS_PER_PAGE} OFFSET {skip}
+                """)
+            else:
+                query = text(f"""
+                    SELECT *
+                    FROM public.{company_id}
+                    WHERE ({date_range_query} AND {filter_query})
+                    LIMIT {ITEMS_PER_PAGE} OFFSET {skip}
+                """)
 
     # query = text(f"SELECT * FROM {company_id} LIMIT {ITEMS_PER_PAGE} OFFSET {skip};")
 
@@ -1916,7 +1932,7 @@ def download_users():
 def internal_error(error):
 
     print(error)
-    
+
     return jsonify("Not Found")
 
 
