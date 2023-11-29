@@ -1507,9 +1507,9 @@ def get_data():
     if filter_query is None:
         if full_data:
             if data_type == 'users':
-                query = text(f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE ({date_range_query});")
+                query = text(f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE {date_range_query};")
             else:
-                query = text(f"SELECT  * FROM {company_id} WHERE ({date_range_query});")
+                query = text(f"SELECT  * FROM {company_id} WHERE {date_range_query};")
         else:
             if data_type == 'users':
                 query = text(f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE ({date_range_query}) LIMIT {ITEMS_PER_PAGE} OFFSET {skip};")
@@ -1549,6 +1549,7 @@ def get_data():
                 """)
 
     # query = text(f"SELECT * FROM {company_id} LIMIT {ITEMS_PER_PAGE} OFFSET {skip};")
+    print('asd')
 
     with ENGINE.connect() as connection:
         data = connection.execute(query)
