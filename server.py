@@ -1505,10 +1505,16 @@ def get_data():
     date_range_query = get_date_query(start_date,end_date)
 
     if filter_query is None:
-        if data_type == 'users':
-            query = text(f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE ({date_range_query}) LIMIT {ITEMS_PER_PAGE} OFFSET {skip};")
+        if full_data:
+            if data_type == 'users':
+                query = text(f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE ({date_range_query});")
+            else:
+                query = text(f"SELECT  * FROM {company_id} WHERE ({date_range_query});")
         else:
-            query = text(f"SELECT  * FROM {company_id} WHERE ({date_range_query}) LIMIT {ITEMS_PER_PAGE} OFFSET {skip};")
+            if data_type == 'users':
+                query = text(f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE ({date_range_query}) LIMIT {ITEMS_PER_PAGE} OFFSET {skip};")
+            else:
+                query = text(f"SELECT  * FROM {company_id} WHERE ({date_range_query}) LIMIT {ITEMS_PER_PAGE} OFFSET {skip};")
 
     else:
         if full_data:
