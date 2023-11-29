@@ -25,6 +25,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.combining import OrTrigger
 from apscheduler.triggers.cron import CronTrigger
 import apscheduler.jobstores.base
+import math
+
 
 
 
@@ -289,123 +291,272 @@ def convert_to_user_friendly_age(age_str):
     elif age >= 100:
         return "100+"
     
-def get_most_popular(table_name, date_range_query, popular_type, state=None):
+def get_most_popular(table_name, date_range_query, popular_type, state=None,filter_query=None):
     item_list = []
     count_list = []
 
-    with ENGINE.connect() as connection:
-        if popular_type == 'hour':
-            query = text(f"""
-                SELECT substr(hour, 1, 2) as hour_part, COUNT(*) as count
-                FROM {table_name}
-                WHERE {date_range_query}
-                GROUP BY hour_part
-                ORDER BY count DESC
-                LIMIT 10
-            """)
-            result = connection.execute(query)
+    if filter_query is not None:
+        with ENGINE.connect() as connection:
+            if popular_type == 'hour':
+                query = text(f"""
+                    SELECT substr(hour, 1, 2) as hour_part, COUNT(*) as count
+                    FROM {table_name}
+                    WHERE ({date_range_query} AND {filter_query})
+                    GROUP BY hour_part
+                    ORDER BY count DESC
+                    LIMIT 10
+                """)
+                result = connection.execute(query)
 
-            for row in result:
-                item_list.append(convert_to_user_friendly_time(row[0]))
-                count_list.append(row[1])
+                for row in result:
+                    item_list.append(convert_to_user_friendly_time(row[0]))
+                    count_list.append(row[1])
 
-        elif popular_type == 'state':
-            query = text(f"""
-                SELECT {popular_type} as item, COUNT(*) as count
-                FROM {table_name}
-                WHERE {date_range_query}
-                GROUP BY {popular_type}
-                ORDER BY count DESC
+            elif popular_type == 'state':
+                query = text(f"""
+                    SELECT {popular_type} as item, COUNT(*) as count
+                    FROM {table_name}
+                    WHERE ({date_range_query} AND {filter_query})
+                    GROUP BY {popular_type}
+                    ORDER BY count DESC
+                    """)
+
+                result = connection.execute(query)
+
+                for row in result:
+                    item_list.append(row[0])
+                    count_list.append(row[1])
+            elif popular_type == 'city':
+                query = text(f"""
+                    SELECT {popular_type} as item, COUNT(*) as count
+                    FROM {table_name}
+                    WHERE ({date_range_query} AND {filter_query} AND state = '{state}')
+                    GROUP BY {popular_type}
+                    ORDER BY count DESC
+                    """)
+
+                result = connection.execute(query)
+
+                for row in result:
+                    item_list.append(row[0])
+                    count_list.append(row[1])
+            else:
+                query = text(f"""
+                    SELECT {popular_type} as item, COUNT(*) as count
+                    FROM {table_name}
+                    WHERE ({date_range_query} AND {filter_query})
+                    GROUP BY {popular_type}
+                    ORDER BY count DESC
+                    LIMIT 10
                 """)
 
-            result = connection.execute(query)
+                result = connection.execute(query)
 
-            for row in result:
-                item_list.append(row[0])
-                count_list.append(row[1])
-        elif popular_type == 'city':
-            query = text(f"""
-                SELECT {popular_type} as item, COUNT(*) as count
-                FROM {table_name}
-                WHERE {date_range_query} AND state = '{state}'
-                GROUP BY {popular_type}
-                ORDER BY count DESC
+                for row in result:
+                    item_list.append(row[0])
+                    count_list.append(row[1])
+    else:
+         with ENGINE.connect() as connection:
+            if popular_type == 'hour':
+                query = text(f"""
+                    SELECT substr(hour, 1, 2) as hour_part, COUNT(*) as count
+                    FROM {table_name}
+                    WHERE {date_range_query}
+                    GROUP BY hour_part
+                    ORDER BY count DESC
+                    LIMIT 10
+                """)
+                result = connection.execute(query)
+
+                for row in result:
+                    item_list.append(convert_to_user_friendly_time(row[0]))
+                    count_list.append(row[1])
+
+            elif popular_type == 'state':
+                query = text(f"""
+                    SELECT {popular_type} as item, COUNT(*) as count
+                    FROM {table_name}
+                    WHERE {date_range_query}
+                    GROUP BY {popular_type}
+                    ORDER BY count DESC
+                    """)
+
+                result = connection.execute(query)
+
+                for row in result:
+                    item_list.append(row[0])
+                    count_list.append(row[1])
+            elif popular_type == 'city':
+                query = text(f"""
+                    SELECT {popular_type} as item, COUNT(*) as count
+                    FROM {table_name}
+                    WHERE ({date_range_query} AND state = '{state}')
+                    GROUP BY {popular_type}
+                    ORDER BY count DESC
+                    """)
+
+                result = connection.execute(query)
+
+                for row in result:
+                    item_list.append(row[0])
+                    count_list.append(row[1])
+            # elif popular_type == 'credit_range' or popular_type == 'income_levels':
+            #     query = text(f"""
+            #         SELECT {popular_type} as item, COUNT(*) as count
+            #         FROM {table_name}
+            #         WHERE {date_range_query}
+            #         GROUP BY {popular_type}
+            #         ORDER BY count DESC
+            #     """)
+
+            #     result = connection.execute(query)
+
+            #     for row in result:
+            #         numbers = re.findall(r'\d+', row[0])
+            #         if popular_type == 'credit_range':
+            #             if 800 in numbers:
+            #                 count_range = [800, 950]
+            #             elif 499 in numbers:
+            #                 count_range = [0,499]
+            #             else:
+            #                 if numbers:
+            #                     count_range = numbers
+            #                 else:
+            #                     count_range = [0,0]
+            #         if popular_type == 'income_levels':
+            #             if 'LT' in row[0]:
+            #                 count_range = [0, 30000]
+            #             elif 'GT' in row[0]:
+            #                 count_range = [150000, 1000000]
+            #             else:
+            #                 if numbers:
+            #                     count_range = [int(numbers[0]) * 1000, int(numbers[1]) * 1000]
+            #                 else:
+            #                     count_range = [0, 0]
+            #         item_list.append({
+            #             'x': row[0],
+            #             'y': count_range
+            #         })
+            #         count_list.append({
+            #             'x': row[0],
+            #             'y': math.floor((int(count_range[0]) + int(count_range[-1])) / 2)
+            #         })
+            else:
+                query = text(f"""
+                    SELECT {popular_type} as item, COUNT(*) as count
+                    FROM {table_name}
+                    WHERE {date_range_query}
+                    GROUP BY {popular_type}
+                    ORDER BY count DESC
+                    LIMIT 10
                 """)
 
-            result = connection.execute(query)
+                result = connection.execute(query)
 
-            for row in result:
-                item_list.append(row[0])
-                count_list.append(row[1])
-        else:
-            query = text(f"""
-                SELECT {popular_type} as item, COUNT(*) as count
-                FROM {table_name}
-                WHERE {date_range_query}
-                GROUP BY {popular_type}
-                ORDER BY count DESC
-                LIMIT 10
-            """)
-
-            result = connection.execute(query)
-
-            for row in result:
-                item_list.append(row[0])
-                count_list.append(row[1])
+                for row in result:
+                    item_list.append(row[0])
+                    count_list.append(row[1])
 
     return item_list, count_list
 
-def get_by_precent_count(table_name, field, date_range_query):
+def get_by_precent_count(table_name, field, date_range_query,filter_query=None):
     item_list = []
     count_list = []
 
-    with ENGINE.connect() as connection:
-        if field == 'age':
-            query = text(f"""
-                SELECT
-                    CASE
-                        WHEN age = '-' THEN 'Unknown'
-                        WHEN age::float < 10 THEN '0-10'
-                        WHEN age::float < 20 THEN '10-20'
-                        WHEN age::float < 30 THEN '20-30'
-                        WHEN age::float < 40 THEN '30-40'
-                        WHEN age::float < 50 THEN '40-50'
-                        WHEN age::float < 60 THEN '50-60'
-                        WHEN age::float < 70 THEN '60-70'
-                        WHEN age::float < 80 THEN '70-80'
-                        WHEN age::float < 90 THEN '80-90'
-                        ELSE 'Unknown'
-                    END AS age_range,
-                    COUNT(*) AS count
-                FROM
-                    {table_name}
-                WHERE
-                    {date_range_query} -- Replace with your actual date range condition
-                GROUP BY
-                    age_range
-                ORDER BY
-                    count DESC
-                LIMIT 10;
+    if filter_query is not None:
+        with ENGINE.connect() as connection:
+            if field == 'age':
+                query = text(f"""
+                    SELECT
+                        CASE
+                            WHEN age = '-' THEN 'Unknown'
+                            WHEN age::float < 10 THEN '0-10'
+                            WHEN age::float < 20 THEN '10-20'
+                            WHEN age::float < 30 THEN '20-30'
+                            WHEN age::float < 40 THEN '30-40'
+                            WHEN age::float < 50 THEN '40-50'
+                            WHEN age::float < 60 THEN '50-60'
+                            WHEN age::float < 70 THEN '60-70'
+                            WHEN age::float < 80 THEN '70-80'
+                            WHEN age::float < 90 THEN '80-90'
+                            ELSE 'Unknown'
+                        END AS age_range,
+                        COUNT(DISTINCT full_name) AS count 
+                    FROM
+                        {table_name}
+                    WHERE ({date_range_query} AND {filter_query}) -- Replace with your actual date range condition
+                    GROUP BY
+                        age_range
+                    ORDER BY
+                        count DESC
+                    LIMIT 10;
 
-            """)
-        else:
-            query = text(f"""
-                SELECT {field} as item, COUNT(*) as count
-                FROM {table_name}
-                WHERE {date_range_query}
-                GROUP BY {field}
-                ORDER BY count DESC
-                LIMIT 10
-            """)
-
-        result = connection.execute(query)
-
-        for row in result:
-            if row[0] == '-' or row[0] == 'Unknown':
-                pass
+                """)
             else:
-                item_list.append(row[0])
-                count_list.append(row[1])
+                query = text(f"""
+                    SELECT {field} as item, COUNT(DISTINCT full_name) AS count 
+                    FROM {table_name}
+                    WHERE ({date_range_query} AND {filter_query})
+                    GROUP BY {field}
+                    ORDER BY count DESC
+                    LIMIT 10
+                """)
+
+            result = connection.execute(query)
+
+            for row in result:
+                if row[0] == '-' or row[0] == 'Unknown':
+                    pass
+                else:
+                    item_list.append(row[0])
+                    count_list.append(row[1])
+    else:
+        with ENGINE.connect() as connection:
+            if field == 'age':
+                query = text(f"""
+                    SELECT
+                        CASE
+                            WHEN age = '-' THEN 'Unknown'
+                            WHEN age::float < 10 THEN '0-10'
+                            WHEN age::float < 20 THEN '10-20'
+                            WHEN age::float < 30 THEN '20-30'
+                            WHEN age::float < 40 THEN '30-40'
+                            WHEN age::float < 50 THEN '40-50'
+                            WHEN age::float < 60 THEN '50-60'
+                            WHEN age::float < 70 THEN '60-70'
+                            WHEN age::float < 80 THEN '70-80'
+                            WHEN age::float < 90 THEN '80-90'
+                            ELSE 'Unknown'
+                        END AS age_range,
+                        COUNT(DISTINCT full_name) AS count 
+                    FROM
+                        {table_name}
+                    WHERE
+                        {date_range_query} -- Replace with your actual date range condition
+                    GROUP BY
+                        age_range
+                    ORDER BY
+                        count DESC
+                    LIMIT 10;
+                """)
+            else:
+                query = text(f"""
+                    SELECT {field} as item, COUNT(DISTINCT full_name) as count 
+                    FROM {table_name}
+                    WHERE {date_range_query}
+                    GROUP BY {field}
+                    ORDER BY count DESC
+                    LIMIT 10;
+                """)
+
+            result = connection.execute(query)
+
+            for row in result:
+                if row[0] == '-' or row[0] == 'Unknown':
+                    pass
+                else:
+                    item_list.append(row[0])
+                    count_list.append(row[1])
 
     return item_list, count_list
 
@@ -675,130 +826,282 @@ def build_filter(company_id,filter_params=None, column_filters=None):
 
 
 
-def update_company_counts(company_id):
-        try:
-            with ENGINE.connect() as connection:
-                journey_count = connection.execute(text(f"SELECT COUNT(*) FROM {company_id}")).scalar()
-                people_count = connection.execute(text(f"SELECT COUNT(DISTINCT full_name) as count FROM {company_id}")).scalar()
+def update_company_counts(company_id,segment_id=None,filter_query=None):
+        if segment_id:
+            try:
+                with ENGINE.connect() as connection:
+                    journey_count = connection.execute(text(f"SELECT COUNT(*) FROM {company_id} WHERE {filter_query}")).scalar()
+                    people_count = connection.execute(text(f"SELECT COUNT(DISTINCT full_name) as count FROM {company_id} WHERE {filter_query}")).scalar()
 
-        except IndexError:
-            people_count = 0
-            journey_count = 0
+            except IndexError:
+                people_count = 0
+                journey_count = 0
 
-        COMPANIES_COLLECTION.update_one({'_id': company_id}, {'$set' : {'counts' : {
-            "people_count" : people_count,
-            "journey_count" : journey_count
-        }}})
+            SEGMENT_COLLECTION.update_one({'_id': segment_id}, {'$set' : {'counts' : {
+                "people_count" : people_count,
+                "journey_count" : journey_count
+            }}})
+        else:
+            try:
+                with ENGINE.connect() as connection:
+                    journey_count = connection.execute(text(f"SELECT COUNT(*) FROM {company_id}")).scalar()
+                    people_count = connection.execute(text(f"SELECT COUNT(DISTINCT full_name) as count FROM {company_id}")).scalar()
+
+            except IndexError:
+                people_count = 0
+                journey_count = 0
+
+            COMPANIES_COLLECTION.update_one({'_id': company_id}, {'$set' : {'counts' : {
+                "people_count" : people_count,
+                "journey_count" : journey_count
+            }}})
         
 
-def update_popular_chart(company_id):
+def update_popular_chart(company_id, segment_id=None, filter_query=None):
     popular_chart = {}
-    popular_types = ['hour', 'url']
+    popular_types = ['hour', 'url','state']
 
-    with ENGINE.connect() as connection:
-        for popular_type in popular_types:
-            item_list = []
-            count_list = []
+    if segment_id:
+        with ENGINE.connect() as connection:
+            for popular_type in popular_types:
+                item_list = []
+                count_list = []
 
-            if popular_type == 'hour':
-                query = text(f"""
-                    SELECT SUBSTRING(hour, 1, 2) AS hour,
-                           COUNT(*) AS count
-                    FROM {company_id}
-                    GROUP BY hour
-                    ORDER BY count DESC
-                    LIMIT 10
-                """)
+                if popular_type == 'hour':
+                    query = text(f"""
+                        SELECT SUBSTRING(hour, 1, 2) AS hour,
+                                COUNT(*) AS count
+                        FROM {company_id}
+                        WHERE {filter_query}
+                        GROUP BY hour
+                        ORDER BY count DESC
+                        LIMIT 10
+                    """)
 
-                result = connection.execute(query).fetchall()
+                    result = connection.execute(query).fetchall()
 
-                for item in result:
-                    item_list.append(convert_to_user_friendly_time(item[0]))
-                    count_list.append(item[1])
+                    for item in result:
+                        item_list.append(convert_to_user_friendly_time(item[0]))
+                        count_list.append(item[1])
 
-            elif popular_type == 'url':
-                query = text(f"""
-                    SELECT url,
-                           COUNT(*) AS count
-                    FROM {company_id}
-                    GROUP BY url
-                    ORDER BY count DESC
-                    LIMIT 10
-                """)
+                elif popular_type == 'state':
+                    query = text(f"""
+                        SELECT {popular_type} as item, COUNT(*) as count
+                        FROM {company_id}
+                        WHERE {filter_query}
+                        GROUP BY {popular_type}
+                        ORDER BY count DESC
+                        """)
 
-                result = connection.execute(query).fetchall()
+                    result = connection.execute(query)
 
-                for item in result:
-                    item_list.append(item[0])
-                    count_list.append(item[1])
+                    for row in result:
+                        item_list.append(row[0])
+                        count_list.append(row[1])
+
+                elif popular_type == 'url':
+                    query = text(f"""
+                        SELECT url,
+                                COUNT(*) AS count
+                        FROM {company_id}
+                        WHERE {filter_query}
+                        GROUP BY url
+                        ORDER BY count DESC
+                        LIMIT 10
+                    """)
+
+                    result = connection.execute(query).fetchall()
+
+                    for item in result:
+                        item_list.append(item[0])
+                        count_list.append(item[1])
 
 
-            popular_chart[popular_type] = {
-                'item_list': item_list,
-                'count_list': count_list
-            }
+                popular_chart[popular_type] = {
+                    'item_list': item_list,
+                    'count_list': count_list
+                }
 
-    COMPANIES_COLLECTION.update_one({'_id': company_id}, {'$set': {'popular_chart': popular_chart}})
+        SEGMENT_COLLECTION.update_one({'_id': segment_id}, {'$set': {'popular_chart': popular_chart}})
+    else:
+        with ENGINE.connect() as connection:
+            for popular_type in popular_types:
+                item_list = []
+                count_list = []
 
-def update_by_percent(company_id):
+                if popular_type == 'hour':
+                    query = text(f"""
+                        SELECT SUBSTRING(hour, 1, 2) AS hour,
+                                COUNT(*) AS count
+                        FROM {company_id}
+                        GROUP BY hour
+                        ORDER BY count DESC
+                        LIMIT 10
+                    """)
+
+                    result = connection.execute(query).fetchall()
+
+                    for item in result:
+                        item_list.append(convert_to_user_friendly_time(item[0]))
+                        count_list.append(item[1])
+                
+                elif popular_type == 'state':
+                    query = text(f"""
+                        SELECT {popular_type} as item, COUNT(*) as count
+                        FROM {company_id}
+                        GROUP BY {popular_type}
+                        ORDER BY count DESC
+                        """)
+
+                    result = connection.execute(query)
+
+                    for row in result:
+                        item_list.append(row[0])
+                        count_list.append(row[1])
+
+                elif popular_type == 'url':
+                    query = text(f"""
+                        SELECT url,
+                                COUNT(*) AS count
+                        FROM {company_id}
+                        GROUP BY url
+                        ORDER BY count DESC
+                        LIMIT 10
+                    """)
+
+                    result = connection.execute(query).fetchall()
+
+                    for item in result:
+                        item_list.append(item[0])
+                        count_list.append(item[1])
+
+
+                popular_chart[popular_type] = {
+                    'item_list': item_list,
+                    'count_list': count_list
+                }
+
+        COMPANIES_COLLECTION.update_one({'_id': company_id}, {'$set': {'popular_chart': popular_chart}})
+
+def update_by_percent(company_id, segment_id=None, filter_query=None):
     by_percent_chart = {}
     fields = ['age', 'gender']
 
-    with ENGINE.connect() as connection:
-        for field in fields:
-            item_list = []
-            count_list = []
-            
-            if field == 'age':
-                query = text(f"""
-                    SELECT
-                    CASE
-                        WHEN age = '-' THEN 'Unknown'
-                        WHEN age::float < 10 THEN '0-10'
-                        WHEN age::float < 20 THEN '10-20'
-                        WHEN age::float < 30 THEN '20-30'
-                        WHEN age::float < 40 THEN '30-40'
-                        WHEN age::float < 50 THEN '40-50'
-                        WHEN age::float < 60 THEN '50-60'
-                        WHEN age::float < 70 THEN '60-70'
-                        WHEN age::float < 80 THEN '70-80'
-                        WHEN age::float < 90 THEN '80-90'
-                        ELSE 'Unknown'
-                    END AS age_range,
-                    COUNT(*) AS count
-                FROM
-                    {company_id}
-                GROUP BY
-                    age_range
-                ORDER BY
-                    count DESC
-                LIMIT 10;
-                    """)
-            else:
-                query = text(f"""
-                    SELECT {field},
-                            COUNT(*) AS count
-                    FROM {company_id}
-                    GROUP BY {field}
-                    ORDER BY count DESC
-                    LIMIT 10
-                """)
-
-            result = connection.execute(query).fetchall()
-
-            for item in result:
-                if item[0] == '-' or item[0] == 'Unknown':
-                    pass
+    if segment_id:
+        with ENGINE.connect() as connection:
+            for field in fields:
+                item_list = []
+                count_list = []
+                
+                if field == 'age':
+                    query = text(f"""
+                        SELECT
+                        CASE
+                            WHEN age = '-' THEN 'Unknown'
+                            WHEN age::float < 10 THEN '0-10'
+                            WHEN age::float < 20 THEN '10-20'
+                            WHEN age::float < 30 THEN '20-30'
+                            WHEN age::float < 40 THEN '30-40'
+                            WHEN age::float < 50 THEN '40-50'
+                            WHEN age::float < 60 THEN '50-60'
+                            WHEN age::float < 70 THEN '60-70'
+                            WHEN age::float < 80 THEN '70-80'
+                            WHEN age::float < 90 THEN '80-90'
+                            ELSE 'Unknown'
+                        END AS age_range,
+                        COUNT(DISTINCT full_name) AS count 
+                    FROM
+                        {company_id}
+                    WHERE 
+                        {filter_query}
+                    GROUP BY
+                        age_range
+                    ORDER BY
+                        count DESC
+                    LIMIT 10;
+                        """)
                 else:
-                    item_list.append(item[0])
-                    count_list.append(item[1])
+                    query = text(f"""
+                        SELECT {field},
+                                COUNT(DISTINCT full_name) AS count 
+                        FROM {company_id}
+                        WHERE {filter_query}
+                        GROUP BY {field}
+                        ORDER BY count DESC
+                        LIMIT 10
+                    """)
 
-            by_percent_chart[field] = {
-                'item_list': item_list,
-                'count_list': count_list
-            }
+                result = connection.execute(query).fetchall()
 
-    COMPANIES_COLLECTION.update_one({'_id': company_id}, {'$set': {'by_percent_chart': by_percent_chart}})
+                for item in result:
+                    if item[0] == '-' or item[0] == 'Unknown':
+                        pass
+                    else:
+                        item_list.append(item[0])
+                        count_list.append(item[1])
+
+                by_percent_chart[field] = {
+                    'item_list': item_list,
+                    'count_list': count_list
+                }
+
+        SEGMENT_COLLECTION.update_one({'_id': segment_id}, {'$set': {'by_percent_chart': by_percent_chart}})
+    else:
+        with ENGINE.connect() as connection:
+            for field in fields:
+                item_list = []
+                count_list = []
+                
+                if field == 'age':
+                    query = text(f"""
+                        SELECT
+                        CASE
+                            WHEN age = '-' THEN 'Unknown'
+                            WHEN age::float < 10 THEN '0-10'
+                            WHEN age::float < 20 THEN '10-20'
+                            WHEN age::float < 30 THEN '20-30'
+                            WHEN age::float < 40 THEN '30-40'
+                            WHEN age::float < 50 THEN '40-50'
+                            WHEN age::float < 60 THEN '50-60'
+                            WHEN age::float < 70 THEN '60-70'
+                            WHEN age::float < 80 THEN '70-80'
+                            WHEN age::float < 90 THEN '80-90'
+                            ELSE 'Unknown'
+                        END AS age_range,
+                        COUNT(DISTINCT full_name) AS count 
+                    FROM
+                        {company_id}
+                    GROUP BY
+                        age_range
+                    ORDER BY
+                        count DESC
+                    LIMIT 10;
+                        """)
+                else:
+                    query = text(f"""
+                        SELECT {field},
+                                COUNT(DISTINCT full_name) AS count 
+                        FROM {company_id}
+                        GROUP BY {field}
+                        ORDER BY count DESC
+                        LIMIT 10
+                    """)
+
+                result = connection.execute(query).fetchall()
+
+                for item in result:
+                    if item[0] == '-' or item[0] == 'Unknown':
+                        pass
+                    else:
+                        item_list.append(item[0])
+                        count_list.append(item[1])
+
+                by_percent_chart[field] = {
+                    'item_list': item_list,
+                    'count_list': count_list
+                }
+
+        COMPANIES_COLLECTION.update_one({'_id': company_id}, {'$set': {'by_percent_chart': by_percent_chart}})
 
 
 
@@ -825,7 +1128,11 @@ def data_changed():
 
     segments = SEGMENT_COLLECTION.find({'attached_company'  : company_id})
     for segment in segments:
+        filter_query = build_filter(company_id,segment['filters'])
         create_df_file_from_db(company_id,segment["_id"],segment['filters'])
+        update_company_counts(company_id,segment['_id'],filter_query)
+        update_popular_chart(company_id,segment['_id'],filter_query)
+        update_by_percent(company_id,segment['_id'],filter_query)
 
     return jsonify('done!')
 
@@ -925,6 +1232,7 @@ def add_company():
 
     update_company_counts(company_id)
     update_popular_chart(company_id)
+    update_by_percent(company_id)
 
     return jsonify({'message': 'Registration successful'}), 201  # Created
 
@@ -979,7 +1287,11 @@ def add_segment():
         
         job.modify(next_run_time=datetime.now())
 
-        # create_df_file_from_db(company_id,segment_id,filters)
+        filter_query = build_filter(company_id,filters)
+
+        update_company_counts(company_id,segment_id,filter_query)
+        update_popular_chart(company_id,segment_id,filter_query)
+        update_by_percent(company_id,segment_id,filter_query)
 
         return jsonify('Done!')
     except jwt.ExpiredSignatureError:
@@ -1305,11 +1617,10 @@ def get_user_journey():
 
 
 
-@app.route("/api/get-geo-data", methods=['POST'])
-def get_geo_data():
+@app.route("/api/get-income-credit", methods=['POST'])
+def get_income_credit():
     data = request.get_json()
     company_id = data.get('id').lower()
-    user_name= data.get('user_name')
     start_date = data.get('start-date')
     end_date = data.get('end-date')
 
@@ -1330,12 +1641,17 @@ def get_company_counts():
         company_id = request.json.get('company_id')
         start_date = request.json.get('start_date')
         end_date = request.json.get('end_date')
+        filters = request.json.get('filters')
+        segment_id = request.json.get('segment_id')
 
-        company_collection = DB_CLIENT[f'{company_id}_data']
+        filter_query = build_filter(company_id,filters)
+
         try:
-
             if any([start_date == 'undefined', start_date == None]):
-                company = COMPANIES_COLLECTION.find_one({'_id': company_id})
+                if segment_id:
+                    company = SEGMENT_COLLECTION.find_one({'_id': segment_id})
+                else:
+                    company = COMPANIES_COLLECTION.find_one({'_id': company_id})
                 counts = company['counts']
                 response = {
                     'people_count': counts['people_count'],
@@ -1344,7 +1660,7 @@ def get_company_counts():
             else:
                 date_range_query = get_date_query(start_date, end_date)
 
-                journey_count, people_count = get_counts(company_id,date_range_query)
+                journey_count, people_count = get_counts(company_id,date_range_query,filter_query)
 
                 response = {
                     'people_count': people_count,
@@ -1374,10 +1690,18 @@ def get_by_precent_counts():
         start_date = request.json.get('start_date')
         end_date = request.json.get('end_date')
         field = request.json.get('field')
-        
+        filters = request.json.get('filters')
+        segment_id = request.json.get('segment_id')
+
+        filter_query = build_filter(company_id,filters)
+
         try:
             if any([start_date == 'undefined', start_date == None]):
-                company = COMPANIES_COLLECTION.find_one({'_id': company_id})
+                if segment_id:
+                    company = SEGMENT_COLLECTION.find_one({'_id': segment_id})
+                else:
+                    company = COMPANIES_COLLECTION.find_one({'_id': company_id})
+                print('after')
                 by_precent_chart = company['by_percent_chart'][field]
                 response = {
                     'items': by_precent_chart['item_list'],
@@ -1386,7 +1710,7 @@ def get_by_precent_counts():
             else:
                 date_range_query = get_date_query(start_date, end_date)
 
-                item_list, count_list = get_by_precent_count(company_id,field,date_range_query)
+                item_list, count_list = get_by_precent_count(company_id,field,date_range_query,filter_query)
 
                 response = {
                     'items': item_list,
@@ -1422,22 +1746,29 @@ def get_company_popular():
         end_date = request.json.get('end_date')
         popular_type = request.json.get('type')
         state = request.json.get('state')
+        filters = request.json.get('filters')
+        segment_id = request.json.get('segment_id')
+
+        filter_query = build_filter(company_id,filters)
+
 
         try:
-            # if any([start_date == 'undefined', start_date == None]):  
-            #     company = COMPANIES_COLLECTION.find_one({'_id': company_id})
-            #     popular_chart = company["popular_chart"][popular_type]
+            if any([start_date == 'undefined', start_date == None]) and popular_type != 'city':
+                if segment_id:
+                    print(segment_id)
+                    company = SEGMENT_COLLECTION.find_one({'_id': segment_id})
+                else:
+                    company = COMPANIES_COLLECTION.find_one({'_id': company_id})
+                popular_chart = company["popular_chart"][popular_type]
 
-            #     response = {
-            #         'popular_items': popular_chart['item_list'],
-            #         'popular_items_counts': popular_chart['count_list']
-            #     }
-            # else:
+                response = {
+                    'popular_items': popular_chart['item_list'],
+                    'popular_items_counts': popular_chart['count_list']
+                }
+            else:
                 date_range_query = get_date_query(start_date, end_date)
 
-                popular_items, popular_items_counts = get_most_popular(company_id,date_range_query,popular_type,state)
-
-                print(popular_items_counts)
+                popular_items, popular_items_counts = get_most_popular(company_id,date_range_query,popular_type,state,filter_query)
 
                 response = {
                     'popular_items': popular_items,
@@ -1584,7 +1915,6 @@ def download_users():
 def internal_error(error):
 
     return jsonify("Not Found")
-
 
 # def update_excluded_users(segment_id):
 #     segment = SEGMENT_COLLECTION.find_one({'_id': segment_id})
