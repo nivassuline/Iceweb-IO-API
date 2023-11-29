@@ -1644,6 +1644,7 @@ def get_company_counts():
         filters = request.json.get('filters')
         segment_id = request.json.get('segment_id')
 
+        print(f'com {company_id}')
         filter_query = build_filter(company_id,filters)
 
         try:
