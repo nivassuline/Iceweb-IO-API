@@ -1510,7 +1510,7 @@ def get_data():
                 query = text(f"SELECT DISTINCT ON (full_name) (full_name,email,maid,maid_os) FROM {company_id} WHERE {date_range_query};")
                 with ENGINE.connect() as connection:
                     data = connection.execute(query)
-                    result = [dict(zip(['full_name','email','maid','maid_os'], row)) for row in data]
+                    result = [dict(zip('full_name','email','maid','maid_os', row)) for row in data]
                 
                 return jsonify(result)
             else:
@@ -1946,6 +1946,7 @@ def internal_error(error):
     print(error)
 
     return jsonify("Not Found")
+
 
 
 # def update_excluded_users(segment_id):
