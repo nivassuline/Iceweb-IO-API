@@ -1507,11 +1507,12 @@ def get_data():
     if filter_query is None:
         if full_data:
             if data_type == 'users':
-                query = text(f"SELECT DISTINCT ON (full_name) full_name,email,maid,maid_os FROM {company_id} WHERE {date_range_query};")
+                query = text(f"SELECT DISTINCT ON (full_name) full_name, email, maid, maid_os FROM {company_id} WHERE {date_range_query};")
+
                 with ENGINE.connect() as connection:
                     data = connection.execute(query)
-                    result = [dict(zip(['full_name','email','maid','maid_os'], row)) for row in data]
-                
+                    result = [dict(list(zip(['index', 'full_name', 'email', 'maid', 'maid_os'], [index + 1] + list(row)))) for index, row in enumerate(data)]
+
                 return jsonify(result)
             else:
                 query = text(f"SELECT  * FROM {company_id} WHERE {date_range_query};")
