@@ -1507,7 +1507,7 @@ def get_data():
     if filter_query is None:
         if full_data:
             if data_type == 'users':
-                query = text(f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE {date_range_query};")
+                query = text(f"SELECT DISTINCT ON (full_name) (full_name,email,maid,maid_os) FROM {company_id} WHERE {date_range_query};")
             else:
                 query = text(f"SELECT  * FROM {company_id} WHERE {date_range_query};")
         else:
