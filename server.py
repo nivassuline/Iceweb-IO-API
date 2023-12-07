@@ -1438,12 +1438,19 @@ def delete_user():
 @app.route("/api/delete-integration", methods=['POST'])
 def delete_integration():
     data = request.get_json()
-
     integration_id = data.get('integration_id')
-    USER_COLLECTION.update_one(
+    segment_id = data.get('segment_id')
+
+    if segment_id:
+        SEGMENT_COLLECTION.update_one(
             {'integrations.id': integration_id},
             {'$pull': {'integrations': {'id': integration_id}}}
         )
+    else:
+        USER_COLLECTION.update_one(
+                {'integrations.id': integration_id},
+                {'$pull': {'integrations': {'id': integration_id}}}
+            )
     return jsonify('done!')
 
 
@@ -2158,8 +2165,7 @@ def test_integration():
                     random_row = result.fetchone()
                     column_names = result.keys()
                 row = dict(zip(column_names, random_row))
-
-                print(row)
+                
             
                 if integration_name == 'Klaviyo':
                     status_code = klayviyo_integration(api_key,row) #done
@@ -2226,6 +2232,8 @@ def internal_error(error):
     print(error)
 
     return jsonify("Not Found")
+
+
 
 # def update_excluded_users(segment_id):
 #     segment = SEGMENT_COLLECTION.find_one({'_id': segment_id})
