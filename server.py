@@ -26,7 +26,7 @@ from apscheduler.triggers.combining import OrTrigger
 from apscheduler.triggers.cron import CronTrigger
 import apscheduler.jobstores.base
 import math
-
+from integrations import *
 
 
 
@@ -59,25 +59,51 @@ COMPANIES_COLLECTION = DB_CLIENT['companies']
 USER_COLLECTION = DB_CLIENT['users']
 ROLE_COLLECTION = DB_CLIENT['roles']
 SEGMENT_COLLECTION = DB_CLIENT['segments']
+INTEGRATION_COLLECTION = DB_CLIENT['integrations']
+
 SECRET_KEY = 'iceweb123456789'
 
 DESIRED_COLUNMS_ORDER = ["date", "id", "hour", "fullName", "firstName", "lastName", "url", "facebook", "linkedIn", "twitter", "email", "optIn", "optInDate", "optInIp", "optInUrl", "pixelFirstHitDate", "pixelLastHitDate", "bebacks", "phone", "dnc", "age", "gender", "maritalStatus", "address", "city", "state", "zip", "householdIncome", "netWorth", "incomeLevels", "peopleInHousehold", "adultsInHousehold", "childrenInHousehold", "veteransInHousehold", "education", "creditRange", "ethnicGroup", "generation", "homeOwner", "occupationDetail", "politicalParty", "religion", "childrenBetweenAges0_3", "childrenBetweenAges4_6", "childrenBetweenAges7_9",
                          "childrenBetweenAges10_12", "childrenBetweenAges13_18", "behaviors", "childrenAgeRanges", "interests", "ownsAmexCard", "ownsBankCard", "dwellingType", "homeHeatType", "homePrice", "homePurchasedYearsAgo", "homeValue", "householdNetWorth", "language", "mortgageAge", "mortgageAmount", "mortgageLoanType", "mortgageRefinanceAge", "mortgageRefinanceAmount", "mortgageRefinanceType", "isMultilingual", "newCreditOfferedHousehold", "numberOfVehiclesInHousehold", "ownsInvestment", "ownsPremiumAmexCard", "ownsPremiumCard", "ownsStocksAndBonds", "personality", "isPoliticalContributor", "isVoter", "premiumIncomeHousehold", "urbanicity", "maid", "maidOs"]
 
-COLUMNS_ORDER = ['date', 'url', 'full_name', 'first_name', 'last_name', 'facebook', 'linked_in', 'twitter', 'email', 'opt_in', 'opt_in_date', 'opt_in_ip', 'opt_in_url', 'pixel_first_hit_date', 'pixel_last_hit_date', 'bebacks', 'phone', 'dnc', 'age', 'gender', 'marital_status', 'address', 'city', 'state', 'zip', 'household_income', 'net_worth', 'income_levels', 'people_in_household', 'adults_in_household', 'children_in_household', 'veterans_in_household', 'education', 'credit_range', 'ethnic_group', 'generation', 'home_owner', 'occupation_detail', 'political_party', 'religion', 'children_between_ages0_3', 'children_between_ages4_6', 'children_between_ages7_9', 'children_between_ages10_12', 'children_between_ages13_18', 'behaviors', 'children_age_ranges', 'interests', 'owns_amex_card', 'owns_bank_card', 'dwelling_type', 'home_heat_type', 'home_price', 'home_purchased_years_ago', 'home_value', 'household_net_worth', 'language', 'mortgage_age', 'mortgage_amount', 'mortgage_loan_type', 'mortgage_refinance_age', 'mortgage_refinance_amount', 'mortgage_refinance_type', 'is_multilingual', 'new_credit_offered_household', 'number_of_vehicles_in_household', 'owns_investment', 'owns_premium_amex_card', 'owns_premium_card', 'owns_stocks_and_bonds', 'personality', 'is_political_contributor', 'is_voter', 'premium_income_household', 'urbanicity', 'maid', 'maid_os', 'hour']
+COLUMNS_ORDER = ['date','date_added', 'url', 'full_name', 'first_name', 'last_name', 'facebook', 'linked_in', 'twitter', 'email', 'opt_in', 'opt_in_date', 'opt_in_ip', 'opt_in_url', 'pixel_first_hit_date', 'pixel_last_hit_date', 'bebacks', 'phone', 'dnc', 'age', 'gender', 'marital_status', 'address', 'city', 'state', 'zip', 'household_income', 'net_worth', 'income_levels', 'people_in_household', 'adults_in_household', 'children_in_household', 'veterans_in_household', 'education', 'credit_range', 'ethnic_group', 'generation', 'home_owner', 'occupation_detail', 'political_party', 'religion', 'children_between_ages0_3', 'children_between_ages4_6', 'children_between_ages7_9', 'children_between_ages10_12', 'children_between_ages13_18', 'behaviors', 'children_age_ranges', 'interests', 'owns_amex_card', 'owns_bank_card', 'dwelling_type', 'home_heat_type', 'home_price', 'home_purchased_years_ago', 'home_value', 'household_net_worth', 'language', 'mortgage_age', 'mortgage_amount', 'mortgage_loan_type', 'mortgage_refinance_age', 'mortgage_refinance_amount', 'mortgage_refinance_type', 'is_multilingual', 'new_credit_offered_household', 'number_of_vehicles_in_household', 'owns_investment', 'owns_premium_amex_card', 'owns_premium_card', 'owns_stocks_and_bonds', 'personality', 'is_political_contributor', 'is_voter', 'premium_income_household', 'urbanicity', 'maid', 'maid_os', 'hour']
 
 
-desired_columns_order_journey = ['date','hour',"url","full_name","firstName","lastName","facebook","linkedIn","twitter","email","optIn","optInDate","optInIp","optInUrl","pixelFirstHitDate","pixelLastHitDate","bebacks","phone","dnc","age","gender","maritalStatus","address","city","state","zip","householdIncome","netWorth","incomeLevels","peopleInHousehold","adultsInHousehold","childrenInHousehold","veteransInHousehold","education","creditRange","ethnicGroup","generation","homeOwner","occupationDetail","politicalParty","religion","childrenBetweenAges0_3","childrenBetweenAges4_6","childrenBetweenAges7_9","childrenBetweenAges10_12","childrenBetweenAges13_18","behaviors","childrenAgeRanges","interests","ownsAmexCard","ownsBankCard","dwellingType","homeHeatType","homePrice","homePurchasedYearsAgo","homeValue","householdNetWorth","language","mortgageAge","mortgageAmount","mortgageLoanType","mortgageRefinanceAge","mortgageRefinanceAmount","mortgageRefinanceType","isMultilingual","newCreditOfferedHousehold","numberOfVehiclesInHousehold","ownsInvestment","ownsPremiumAmexCard","ownsPremiumCard","ownsStocksAndBonds","personality","isPoliticalContributor","isVoter","premiumIncomeHousehold","urbanicity","maid","maidOs"] 
+desired_columns_order_journey = ['date','date_added','hour',"url","full_name","firstName","lastName","facebook","linkedIn","twitter","email","optIn","optInDate","optInIp","optInUrl","pixelFirstHitDate","pixelLastHitDate","bebacks","phone","dnc","age","gender","maritalStatus","address","city","state","zip","householdIncome","netWorth","incomeLevels","peopleInHousehold","adultsInHousehold","childrenInHousehold","veteransInHousehold","education","creditRange","ethnicGroup","generation","homeOwner","occupationDetail","politicalParty","religion","childrenBetweenAges0_3","childrenBetweenAges4_6","childrenBetweenAges7_9","childrenBetweenAges10_12","childrenBetweenAges13_18","behaviors","childrenAgeRanges","interests","ownsAmexCard","ownsBankCard","dwellingType","homeHeatType","homePrice","homePurchasedYearsAgo","homeValue","householdNetWorth","language","mortgageAge","mortgageAmount","mortgageLoanType","mortgageRefinanceAge","mortgageRefinanceAmount","mortgageRefinanceType","isMultilingual","newCreditOfferedHousehold","numberOfVehiclesInHousehold","ownsInvestment","ownsPremiumAmexCard","ownsPremiumCard","ownsStocksAndBonds","personality","isPoliticalContributor","isVoter","premiumIncomeHousehold","urbanicity","maid","maidOs"] 
 
-JOURNEY_FILE_COLUMNS_ORDER = ['date', 'hour','full_name','url', 'facebook', 'linked_in', 'twitter', 'email', 'opt_in', 'opt_in_date', 'opt_in_ip', 'opt_in_url', 'pixel_first_hit_date', 'pixel_last_hit_date', 'bebacks', 'phone', 'dnc', 'age', 'gender', 'marital_status', 'address', 'city', 'state', 'zip', 'household_income', 'net_worth', 'income_levels', 'people_in_household', 'adults_in_household', 'children_in_household', 'veterans_in_household', 'education', 'credit_range', 'ethnic_group', 'generation', 'home_owner', 'occupation_detail', 'political_party', 'religion', 'children_between_ages0_3', 'children_between_ages4_6', 'children_between_ages7_9', 'children_between_ages10_12', 'children_between_ages13_18', 'behaviors', 'children_age_ranges', 'interests', 'owns_amex_card', 'owns_bank_card', 'dwelling_type', 'home_heat_type', 'home_price', 'home_purchased_years_ago', 'home_value', 'household_net_worth', 'language', 'mortgage_age', 'mortgage_amount', 'mortgage_loan_type', 'mortgage_refinance_age', 'mortgage_refinance_amount', 'mortgage_refinance_type', 'is_multilingual', 'new_credit_offered_household', 'number_of_vehicles_in_household', 'owns_investment', 'owns_premium_amex_card', 'owns_premium_card', 'owns_stocks_and_bonds', 'personality', 'is_political_contributor', 'is_voter', 'premium_income_household', 'urbanicity', 'maid', 'maid_os']
+JOURNEY_FILE_COLUMNS_ORDER = ['date', 'date_added', 'hour','full_name','url', 'facebook', 'linked_in', 'twitter', 'email', 'opt_in', 'opt_in_date', 'opt_in_ip', 'opt_in_url', 'pixel_first_hit_date', 'pixel_last_hit_date', 'bebacks', 'phone', 'dnc', 'age', 'gender', 'marital_status', 'address', 'city', 'state', 'zip', 'household_income', 'net_worth', 'income_levels', 'people_in_household', 'adults_in_household', 'children_in_household', 'veterans_in_household', 'education', 'credit_range', 'ethnic_group', 'generation', 'home_owner', 'occupation_detail', 'political_party', 'religion', 'children_between_ages0_3', 'children_between_ages4_6', 'children_between_ages7_9', 'children_between_ages10_12', 'children_between_ages13_18', 'behaviors', 'children_age_ranges', 'interests', 'owns_amex_card', 'owns_bank_card', 'dwelling_type', 'home_heat_type', 'home_price', 'home_purchased_years_ago', 'home_value', 'household_net_worth', 'language', 'mortgage_age', 'mortgage_amount', 'mortgage_loan_type', 'mortgage_refinance_age', 'mortgage_refinance_amount', 'mortgage_refinance_type', 'is_multilingual', 'new_credit_offered_household', 'number_of_vehicles_in_household', 'owns_investment', 'owns_premium_amex_card', 'owns_premium_card', 'owns_stocks_and_bonds', 'personality', 'is_political_contributor', 'is_voter', 'premium_income_household', 'urbanicity', 'maid', 'maid_os']
 
-USERS_FILE_COLUMNS_ORDER = ['date','full_name', 'email','facebook', 'linked_in', 'twitter', 'opt_in', 'opt_in_date', 'opt_in_ip', 'opt_in_url', 'pixel_first_hit_date', 'pixel_last_hit_date', 'bebacks', 'phone', 'dnc', 'age', 'gender', 'marital_status', 'address', 'city', 'state', 'zip', 'household_income', 'net_worth', 'income_levels', 'people_in_household', 'adults_in_household', 'children_in_household', 'veterans_in_household', 'education', 'credit_range', 'ethnic_group', 'generation', 'home_owner', 'occupation_detail', 'political_party', 'religion', 'children_between_ages0_3', 'children_between_ages4_6', 'children_between_ages7_9', 'children_between_ages10_12', 'children_between_ages13_18', 'behaviors', 'children_age_ranges', 'interests', 'owns_amex_card', 'owns_bank_card', 'dwelling_type', 'home_heat_type', 'home_price', 'home_purchased_years_ago', 'home_value', 'household_net_worth', 'language', 'mortgage_age', 'mortgage_amount', 'mortgage_loan_type', 'mortgage_refinance_age', 'mortgage_refinance_amount', 'mortgage_refinance_type', 'is_multilingual', 'new_credit_offered_household', 'number_of_vehicles_in_household', 'owns_investment', 'owns_premium_amex_card', 'owns_premium_card', 'owns_stocks_and_bonds', 'personality', 'is_political_contributor', 'is_voter', 'premium_income_household', 'urbanicity']
+USERS_FILE_COLUMNS_ORDER = ['date', 'date_added', 'full_name', 'email','facebook', 'linked_in', 'twitter', 'opt_in', 'opt_in_date', 'opt_in_ip', 'opt_in_url', 'pixel_first_hit_date', 'pixel_last_hit_date', 'bebacks', 'phone', 'dnc', 'age', 'gender', 'marital_status', 'address', 'city', 'state', 'zip', 'household_income', 'net_worth', 'income_levels', 'people_in_household', 'adults_in_household', 'children_in_household', 'veterans_in_household', 'education', 'credit_range', 'ethnic_group', 'generation', 'home_owner', 'occupation_detail', 'political_party', 'religion', 'children_between_ages0_3', 'children_between_ages4_6', 'children_between_ages7_9', 'children_between_ages10_12', 'children_between_ages13_18', 'behaviors', 'children_age_ranges', 'interests', 'owns_amex_card', 'owns_bank_card', 'dwelling_type', 'home_heat_type', 'home_price', 'home_purchased_years_ago', 'home_value', 'household_net_worth', 'language', 'mortgage_age', 'mortgage_amount', 'mortgage_loan_type', 'mortgage_refinance_age', 'mortgage_refinance_amount', 'mortgage_refinance_type', 'is_multilingual', 'new_credit_offered_household', 'number_of_vehicles_in_household', 'owns_investment', 'owns_premium_amex_card', 'owns_premium_card', 'owns_stocks_and_bonds', 'personality', 'is_political_contributor', 'is_voter', 'premium_income_household', 'urbanicity']
 
 ITEMS_PER_PAGE = 13
 
 AZURE_ACCOUNT_URL = "https://icewebstorage.blob.core.windows.net"
 AZURE_CONNECTION_BLOB_STRING = "zQNgBDFROUur92AMQIDwSoIm3Fswg4rCmjHniH3wvIMLnP8ewXdBISHa1yCxG/obFJHufoAlo/NZ+ASt5bMcvg=="
 AZURE_CONTAINER_NAME = "icewebio"
+
+
+
+
+
+def get_integration(integration_name):
+    if integration_name == 'Klaviyo':
+        return klayviyo_integration
+    elif integration_name == 'Customer.io':
+        return customerIO_integration
+    elif integration_name == 'Mailchimp':
+        return mailchimp_integration
+    elif integration_name == 'SendGrid':
+        return sendgrid_integration
+    elif integration_name == 'HubSpot':
+        return hubspot_integration
+    elif integration_name == 'EmailOctopus':
+        return emailoctopus_integration
+    elif integration_name == 'OmniSend':
+        return omnisend_integration
+    
+
+
+
 
 
     # Function to convert camelCase to snake_case
@@ -1105,7 +1131,34 @@ def update_by_percent(company_id, segment_id=None, filter_query=None):
 
 
 
+def update_integration(company_id,api_key,integration_name,site_id=None,list_id=None,filter_query=None):
+    # Build and execute the SQL query to select a random row
+    if filter_query:
+        query = text(f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE (CAST(date_added AS DATE) = CURRENT_DATE AND {filter_query}) LIMIT 10;")
+    else:
+        query = text(f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE CAST(date_added AS DATE) = CURRENT_DATE LIMIT 10;")
 
+
+    with ENGINE.connect() as connection:
+        result = connection.execute(query)
+        column_names = result.keys()
+    data = [dict(zip(column_names, row)) for row in result]
+
+    for row in data:
+        if integration_name == 'Klaviyo':
+            klayviyo_integration(api_key,row) 
+        elif integration_name == 'Customer.io':
+            customerIO_integration(site_id,api_key,row) 
+        elif integration_name == 'Mailchimp':
+            mailchimp_integration(api_key,list_id,row) 
+        elif integration_name == 'SendGrid':
+            sendgrid_integration(api_key,row,[list_id]) 
+        elif integration_name == 'HubSpot':
+            hubspot_integration(api_key,row) 
+        elif integration_name == 'EmailOctopus':
+            emailoctopus_integration(api_key,list_id,row) 
+        elif integration_name == 'OmniSend':
+            omnisend_integration(api_key,row) 
 
 
 
@@ -1121,18 +1174,30 @@ def data_changed():
     data = request.get_json()
     company_id = data.get('company_id')
 
-    create_df_file_from_db(company_id)
-    update_company_counts(company_id)
-    update_popular_chart(company_id)
-    update_by_percent(company_id)
+    # create_df_file_from_db(company_id)
+    # update_company_counts(company_id)
+    # update_popular_chart(company_id)
+    # update_by_percent(company_id)
 
-    segments = SEGMENT_COLLECTION.find({'attached_company'  : company_id})
-    for segment in segments:
-        filter_query = build_filter(company_id,segment['filters'])
-        create_df_file_from_db(company_id,segment["_id"],segment['filters'])
-        update_company_counts(company_id,segment['_id'],filter_query)
-        update_popular_chart(company_id,segment['_id'],filter_query)
-        update_by_percent(company_id,segment['_id'],filter_query)
+    # segments = SEGMENT_COLLECTION.find({'attached_company'  : company_id})
+    # for segment in segments:
+    #     filter_query = build_filter(company_id,segment['filters'])
+    #     create_df_file_from_db(company_id,segment["_id"],segment['filters'])
+    #     update_company_counts(company_id,segment['_id'],filter_query)
+    #     update_popular_chart(company_id,segment['_id'],filter_query)
+    #     update_by_percent(company_id,segment['_id'],filter_query)
+    for user in USER_COLLECTION.find({'companies': company_id}):
+       print(user)
+       print(user["integrations"])
+       if user["integrations"]:
+           for integration in user["integrations"]:
+               update_integration(
+                company_id,
+                integration["api_key"],
+                integration["integration_name"],
+                integration["site_id"],
+                integration["list_id"]
+                )
 
     return jsonify('done!')
 
@@ -1189,7 +1254,8 @@ def register():
         'user_name': user_name,
         'user_password': hashed_password,
         'user_role': user_role,
-        'companies': companies_list
+        'companies': companies_list,
+        'integrations' : []
     }
 
     USER_COLLECTION.insert_one(new_user)
@@ -1256,6 +1322,60 @@ def add_data():
     return jsonify('Done!')
 
 
+@app.route("/api/add-integration", methods=['POST'])
+def add_integration():
+    token = request.headers.get('Authorization')
+    try:
+        data = request.get_json()
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        user_id = payload['user_id']
+        company_id = data.get('company_id')
+        integration_name = data.get('integration_name')
+        api_key = data.get('api_key')
+        site_id = data.get('site_id')
+        list_id = data.get('list_id')
+        filters = data.get('filters')
+        segment_id = data.get('segment_id')
+        
+
+        user = USER_COLLECTION.find_one({'_id': user_id})
+
+        integration_id = uuid.uuid4().hex
+
+        new_integration = {
+            "id": integration_id,
+            "integration_name": integration_name,
+            "attached_company": company_id,
+            "api_key": api_key,
+            "site_id" : site_id,
+            "list_id" : list_id
+        }
+        if site_id:
+            new_integration["site_id"] = site_id
+        if list_id:
+            new_integration["list_id"] = list_id
+
+        if segment_id:
+            SEGMENT_COLLECTION.update_one({'_id': segment_id} , {'$push' : {'integrations' : new_integration}})
+        else:
+            USER_COLLECTION.update_one({'_id': user_id}, {'$push' : {'integrations' : new_integration}})
+
+
+        filter_query = build_filter(company_id,filters)
+
+        # update_integration(company_id,api_key,integration_name,site_id,list_id)
+
+        job = scheduler.add_job(func=update_integration, misfire_grace_time=15*60,
+                            args=[company_id,api_key,integration_name,site_id,list_id,filter_query])
+        
+        job.modify(next_run_time=datetime.now())
+
+        return jsonify('Done!')
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Token has expired"}), 401
+    except jwt.DecodeError as e:
+        return jsonify({"error": "Invalid token"}), 401
+
 @app.route("/api/add-segment", methods=['POST'])
 def add_segment():
     token = request.headers.get('Authorization')
@@ -1278,6 +1398,7 @@ def add_segment():
             "attached_company": company_id,
             "created_by": user["user_name"],
             "filters": filters,
+            "integrations" : []
         }
 
         SEGMENT_COLLECTION.insert_one(new_segment)
@@ -1311,6 +1432,21 @@ def delete_user():
                                      '$pull': {'attached_users': user['user_email']}})
 
     return jsonify('done!')
+
+
+
+@app.route("/api/delete-integration", methods=['POST'])
+def delete_integration():
+    data = request.get_json()
+
+    integration_id = data.get('integration_id')
+    USER_COLLECTION.update_one(
+            {'integrations.id': integration_id},
+            {'$pull': {'integrations': {'id': integration_id}}}
+        )
+    return jsonify('done!')
+
+
 
 
 @app.route("/api/delete-company", methods=['POST'])
@@ -1347,12 +1483,15 @@ def delete_segment():
 @app.route("/api/import", methods=['POST'])
 def import_data():
     company_id = request.args.get('id')
+    print(company_id)
     path = '/Users/neevassouline/Desktop/Coding Projects/IcewebIO/backend/data.csv'
 
     df = pd.read_csv(path)
     df.fillna('-', inplace=True)
 
     df["date"] = pd.to_datetime(df["date"])
+    df['date_added'] = datetime.now().date()
+    df['date_added'] = df['date_added'].astype(str)
     df['hour'] = df['date'].dt.strftime('%H:%M:%S')
     df['date'] = df['date'].dt.strftime('%Y-%m-%d')
     df['full_name'] = df['firstName'] + ' ' + df['lastName']
@@ -1424,6 +1563,31 @@ def get_user_list():
                 "user_name": user['user_name'],
                 "user_id": user['_id']
             })
+
+        return jsonify(users_lst), 200
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Token has expired"}), 401
+    except jwt.DecodeError as e:
+        print(e)
+        return jsonify({"error": "Invalid token"}), 401
+    
+
+@app.route("/api/get-user-integrations", methods=['POST'])
+def get_user_integrations():
+    users_lst = []
+    token = request.headers.get('Authorization')
+    try:
+        data = request.get_json()
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        user_id = payload['user_id']
+        segment_id = data.get('segment_id')
+
+        if segment_id:
+            segment = SEGMENT_COLLECTION.find_one({'_id': segment_id})
+            return jsonify(segment['integrations'])
+        else:
+            user = USER_COLLECTION.find_one({'_id': user_id})
+            return jsonify(user['integrations'])
 
         return jsonify(users_lst), 200
     except jwt.ExpiredSignatureError:
@@ -1559,7 +1723,8 @@ def get_data():
 
     with ENGINE.connect() as connection:
         data = connection.execute(query)
-        result = [dict(zip(COLUMNS_ORDER, row)) for row in data]
+        colum_list = data.keys()
+        result = [dict(zip(colum_list, row)) for row in data]
 
     # Return data as JSON
     return jsonify(result)
@@ -1909,6 +2074,120 @@ def stream_chunked_documents(collection):
 
         # Send the JSON string as chunk of the response
         yield f'{json_docs}\n'
+
+
+
+@app.route("/api/create-integration", methods=['POST'])
+def create_integration():
+    token = request.headers.get('Authorization')
+    try:
+        data = request.get_json()
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        company_id = data.get('company_id')
+        integration_name = data.get('integration_name')
+        api_key = data.get('api_key')
+        site_id = data.get('site_id')
+        list_id = data.get('list_id')
+        code_list = []
+
+        integration_doc = INTEGRATION_COLLECTION.find_one({'name' : integration_name})
+        if integration_doc:
+                # Build and execute the SQL query to select a random row
+                query = text(f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE CAST(date_added AS DATE) = CURRENT_DATE;")
+
+                with ENGINE.connect() as connection:
+                    result = connection.execute(query)
+                    column_names = result.keys()
+                data = [dict(zip(column_names, row)) for row in result]
+
+                print(data)
+
+                for row in data:
+                    if integration_name == 'Klaviyo':
+                        status_code = klayviyo_integration(api_key,row) 
+                    elif integration_name == 'Customer.io':
+                        status_code = customerIO_integration(site_id,api_key,row) 
+                    elif integration_name == 'Mailchimp':
+                        status_code = mailchimp_integration(api_key,list_id,row) 
+                    elif integration_name == 'SendGrid':
+                        status_code = sendgrid_integration(api_key,row,[list_id]) 
+                    elif integration_name == 'HubSpot':
+                        status_code = hubspot_integration(api_key,row) 
+                    elif integration_name == 'EmailOctopus':
+                        status_code = emailoctopus_integration(api_key,list_id,row) 
+                    elif integration_name == 'OmniSend':
+                        status_code = omnisend_integration(api_key,row) #done
+                    code_list.append(status_code)
+
+                print(code_list)
+                return jsonify(200)
+
+        else:
+            return jsonify(404)
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Token has expired"}), 401
+    except jwt.DecodeError as e:
+        return jsonify({"error": "Invalid token"}), 401
+    
+
+@app.route("/api/test-integration", methods=['POST'])
+def test_integration():
+    token = request.headers.get('Authorization')
+    try:
+        data = request.get_json()
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        company_id = data.get('company_id')
+        integration_name = data.get('integration_name')
+        api_key = data.get('api_key')
+        site_id = data.get('site_id')
+        list_id = data.get('list_id')
+        filters = data.get('filters')
+
+
+        integration_doc = INTEGRATION_COLLECTION.find_one({'name' : integration_name})
+        if integration_doc:
+                # Build and execute the SQL query to select a random row
+                if filters:
+                    filter_query = build_filter(company_id,filters)
+                    query = text(f"SELECT * FROM {company_id} WHERE {filter_query} ORDER BY random() LIMIT 1;")
+                else:
+                    query = text(f"SELECT * FROM {company_id} ORDER BY random() LIMIT 1;")
+
+                with ENGINE.connect() as connection:
+                    result = connection.execute(query)
+                    random_row = result.fetchone()
+                    column_names = result.keys()
+                row = dict(zip(column_names, random_row))
+
+                print(row)
+            
+                if integration_name == 'Klaviyo':
+                    status_code = klayviyo_integration(api_key,row) #done
+                elif integration_name == 'Customer.io':
+                    status_code = customerIO_integration(site_id,api_key,row) #done
+                elif integration_name == 'Mailchimp':
+                    status_code = mailchimp_integration(api_key,list_id,row) #done
+                elif integration_name == 'SendGrid':
+                    status_code = sendgrid_integration(api_key,row,[list_id]) #done
+                elif integration_name == 'HubSpot':
+                    status_code = hubspot_integration(api_key,row) #done
+                elif integration_name == 'EmailOctopus':
+                    status_code = emailoctopus_integration(api_key,list_id,row,test=True) #done
+                elif integration_name == 'OmniSend':
+                    status_code = omnisend_integration(api_key,row) #done
+
+                print(status_code)
+
+                if status_code in [200,201,202] :
+                    return jsonify(200)
+                else:
+                    return jsonify(500)
+        else:
+            return jsonify(404)
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Token has expired"}), 401
+    except jwt.DecodeError as e:
+        return jsonify({"error": "Invalid token"}), 401
 
 @app.route("/api/download-users", methods=['POST'])
 def download_users():
