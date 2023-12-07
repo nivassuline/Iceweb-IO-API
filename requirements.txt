@@ -9,3 +9,6 @@ APScheduler
 psycopg2
 sqlalchemy
 azure-storage-blob
+mailchimp_marketing
+phonenumbers
+customerio
