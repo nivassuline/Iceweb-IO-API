@@ -27,6 +27,11 @@ from apscheduler.triggers.cron import CronTrigger
 import apscheduler.jobstores.base
 import math
 from integrations import *
+# from google.auth.transport.requests import Request
+# from google.auth.credentials import AnonymousCredentials
+# from google.auth.transport.requests import Request
+# from google.auth import jwt
+# from google.ads.googleads.client import GoogleAdsClient
 
 
 
@@ -1131,7 +1136,7 @@ def update_by_percent(company_id, segment_id=None, filter_query=None):
 
 
 
-def update_integration(company_id,api_key,integration_name,site_id=None,list_id=None,filter_query=None):
+def update_integration(company_id,api_key,integration_name,client_secret=None,public_id=None,site_id=None,list_id=None,filter_query=None):
     # Build and execute the SQL query to select a random row
     if filter_query:
         query = text(f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE (CAST(date_added AS DATE) = CURRENT_DATE AND {filter_query}) LIMIT 10;")
@@ -1147,6 +1152,8 @@ def update_integration(company_id,api_key,integration_name,site_id=None,list_id=
     for row in data:
         if integration_name == 'Klaviyo':
             klayviyo_integration(api_key,row) 
+        elif integration_name == 'BayEngage':
+            bayengage_integration(client_secret,public_id,row,list_id)
         elif integration_name == 'Customer.io':
             customerIO_integration(site_id,api_key,row) 
         elif integration_name == 'Mailchimp':
@@ -1161,7 +1168,49 @@ def update_integration(company_id,api_key,integration_name,site_id=None,list_id=
             omnisend_integration(api_key,row) 
 
 
+# @app.route("/api/auth/google", methods=['POST'])
+# def auth_google():
+#     code = request.json.get('code')
+#     client_id = '852749625849-0711o5c0mn6elckm3cqllf546am5u58d.apps.googleusercontent.com'
+#     client_secret = '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'
+#     redirect_uri = 'http://localhost:3000'
+#     grant_type = 'authorization_code'
 
+#     token_url = 'https://oauth2.googleapis.com/token'
+#     headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+#     data = {
+#         'code': code,
+#         'client_id': client_id,
+#         'client_secret': client_secret,
+#         'redirect_uri': redirect_uri,
+#         'grant_type': grant_type,
+#     }
+
+#     try:
+#         response = requests.post(token_url, headers=headers, data=data)
+#         response.raise_for_status()
+#         tokens = response.json()
+
+
+#         credentials = {
+#                 "developer_token": "A37QyGuX6bLSUzyCMrfvbA",
+#                 "refresh_token": tokens['refresh_token'],
+#                 "client_id": client_id,
+#                 "client_secret": client_secret,
+#                 "use_proto_plus": False}
+
+#         print(credentials)
+#         client = GoogleAdsClient.load_from_dict(credentials)
+#         # Send the tokens back to the frontend, or store them securely and create a session
+
+#         create_customer_match_user_list(client, '2315440060')
+#         return jsonify(tokens)
+#     except requests.exceptions.RequestException as e:
+#         # Handle errors in the token exchange
+#         print('Token exchange error:', e)
+#         return jsonify({'error': 'Internal Server Error'})
+    
+    
 @app.route("/api/test", methods=['GET'])
 def tes():
     create_df_file_from_db('xs249')
@@ -1187,6 +1236,8 @@ def data_changed():
         update_popular_chart(company_id,segment['_id'],filter_query)
         update_by_percent(company_id,segment['_id'],filter_query)
     for user in USER_COLLECTION.find({'companies': company_id}):
+       print(user)
+       print(user["integrations"])
        if user["integrations"]:
            for integration in user["integrations"]:
                update_integration(
@@ -1332,9 +1383,13 @@ def add_integration():
         api_key = data.get('api_key')
         site_id = data.get('site_id')
         list_id = data.get('list_id')
+        client_secret = data.get('client_secret')
+        public_id = data.get('public_id')
         filters = data.get('filters')
         segment_id = data.get('segment_id')
         
+        print(client_secret)
+        print(public_id)
 
         user = USER_COLLECTION.find_one({'_id': user_id})
 
@@ -1344,15 +1399,16 @@ def add_integration():
             "id": integration_id,
             "integration_name": integration_name,
             "attached_company": company_id,
-            "api_key": api_key,
-            "site_id" : site_id,
-            "list_id" : list_id
+            "api_key": api_key
         }
         if site_id:
             new_integration["site_id"] = site_id
         if list_id:
             new_integration["list_id"] = list_id
-
+        if client_secret and public_id:
+            new_integration["client_secret"] = client_secret
+            new_integration["public_id"] = public_id
+        
         if segment_id:
             SEGMENT_COLLECTION.update_one({'_id': segment_id} , {'$push' : {'integrations' : new_integration}})
         else:
@@ -2146,6 +2202,8 @@ def test_integration():
         api_key = data.get('api_key')
         site_id = data.get('site_id')
         list_id = data.get('list_id')
+        client_secret = data.get('client_secret')
+        public_id = data.get('public_id')
         filters = data.get('filters')
 
 
@@ -2167,6 +2225,14 @@ def test_integration():
             
                 if integration_name == 'Klaviyo':
                     status_code = klayviyo_integration(api_key,row) #done
+                elif integration_name == 'BayEngage':
+                    print(client_secret)
+                    print(public_id)
+                    print(list_id)
+                    if client_secret and public_id:
+                        status_code = bayengage_integration(client_secret,public_id,row,list_id)
+                    else:
+                        status_code = 500
                 elif integration_name == 'Customer.io':
                     status_code = customerIO_integration(site_id,api_key,row) #done
                 elif integration_name == 'Mailchimp':
