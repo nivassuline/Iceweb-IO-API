@@ -1,78 +1,7 @@
-import requests
-
-# # Set the endpoint URL
-# url = "https://api.bayengage.com/api/v1/customer/batch"
-
-# # Set the headers
-# headers = {
-#     "x-client-secret": "988925cac9ce56992deb15eb71daad63",
-#     "x-public-id": "727f10444e1a",
-#     "Content-Type": "application/json",
-# }
-
-
-# data = {
-#   "id": 984112,
-#   "email": "johndoe@targetbay.com",
-#   "source": "api",
-#   "email_subscription": "active",
-#   "tags": [
-#     "tag1",
-#     "tag2"
-#   ],
-#   "custom_fields": [
-#     {
-#       "favourite_color": "blue"
-#     },
-#     {
-#       "age": "28"
-#     }
-#   ],
-#   "first_name": "John",
-#   "last_name": "Doe",
-#   "address1": "Melrose Avenue",
-#   "address2": 102,
-#   "city": "Los Angeles",
-#   "province": "Michigan",
-#   "zip": 30303,
-#   "country": "United States",
-#   "list_id": "f5bd091305c0"
-# }
-
-# subs = [{
-#   "id": 984112,
-#   "email": "johndoe@targetbay.com",
-#   "source": "api",
-#   "email_subscription": "active",
-#   "tags": [
-#     "tag1",
-#     "tag2"
-#   ],
-#   "first_name": "John",
-#   "last_name": "Doe",
-#   "address1": "Melrose Avenue",
-#   "address2": 102,
-#   "city": "Los Angeles",
-#   "province": "Michigan",
-#   "zip": 30303,
-#   "country": "United States",
-# }]
-
-
-# # Send the POST request
-# response = requests.post(url, headers=headers, json=data)
-
-# # Check the response
-# if response.status_code == 200:
-#     print("Request successful")
-#     print(response.json())
-# else:
-#     print(f"Request failed with status code {response.status_code}")
-#     print(response.text)
 
 
 ##
-# NOT WORKS
+# WORK
 ##
 
 
@@ -291,7 +220,12 @@ import phonenumbers
 import mailchimp_marketing as MailchimpMarketing
 from mailchimp_marketing.api_client import ApiClientError
 from datetime import datetime, timedelta
-
+# from google.auth.transport.requests import Request
+# from google.auth.credentials import AnonymousCredentials
+# from google.auth.transport.requests import Request
+# from google.auth import jwt
+# from google.ads.googleads.client import GoogleAdsClient
+# import uuid
 
 data = {
     "address": "7013 Van Antwerp Dr",
@@ -390,6 +324,51 @@ def format_phone_number(phone_number):
     except Exception:
         return "+10000000000"
 
+# def create_customer_match_user_list(client, customer_id):
+#     """Creates a Customer Match user list.
+
+#     Args:
+#         client: The Google Ads client.
+#         customer_id: The ID for the customer that owns the user list.
+
+#     Returns:
+#         The string resource name of the newly created user list.
+#     """
+#     # Creates the UserListService client.
+#     user_list_service_client = client.get_service("UserListService")
+
+#     # Creates the user list operation.
+#     user_list_operation = client.get_type("UserListOperation")
+
+#     # Creates the new user list.
+#     user_list = user_list_operation.create
+#     user_list.name = f"Customer Match list #{uuid.uuid4()}"
+#     user_list.description = (
+#         "A list of customers that originated from email and physical addresses"
+#     )
+#     # Sets the upload key type to indicate the type of identifier that is used
+#     # to add users to the list. This field is immutable and required for a
+#     # CREATE operation.
+#     user_list.crm_based_user_list.upload_key_type = (
+#         client.enums.CustomerMatchUploadKeyTypeEnum.CONTACT_INFO
+#     )
+#     # Customer Match user lists can set an unlimited membership life span;
+#     # to do so, use the special life span value 10000. Otherwise, membership
+#     # life span must be between 0 and 540 days inclusive. See:
+#     # https://developers.devsite.corp.google.com/google-ads/api/reference/rpc/latest/UserList#membership_life_span
+#     # Sets the membership life span to 30 days.
+#     user_list.membership_life_span = 30
+
+#     response = user_list_service_client.mutate_user_lists(
+#         customer_id=customer_id, operations=[user_list_operation]
+#     )
+#     user_list_resource_name = response.results[0].resource_name
+#     print(
+#         f"User list with resource name '{user_list_resource_name}' was created."
+#     )
+
+#     return user_list_resource_name
+
 
 def get_birthdate_from_age(age):
     try:
@@ -409,6 +388,49 @@ def get_birthdate_from_age(age):
     except Exception:
         birthdate = datetime(1900, 1, 1)
         return birthdate.strftime('%Y-%m-%d')
+    
+
+def bayengage_integration(client_secret,public_id,data,list_id=None):
+    # Set the endpoint URL
+    url = "https://api.bayengage.com/api/v1/customer/batch"
+
+    # Set the headers
+    headers = {
+        "x-client-secret": client_secret,
+        "x-public-id": public_id,
+        "Content-Type": "application/json",
+    }
+
+
+    subs = {
+    "subscribers": [
+        {
+        "email": data["email"],
+        "source": "api",
+        "email_subscription": "active",
+        "custom_fields": [{key:value} for key, value in data.items()],
+        "first_name": data["first_name"],
+        "last_name": data["last_name"],
+        "address1": data["address"],
+        "city": data["city"],
+        "province": data["state"],
+        "zip": data["zip"],
+        "country": "United States",
+        }
+    ]
+    }
+
+    if list_id:
+        subs["subscribers"][0]["list_id"] = list_id
+    
+
+
+    # Send the POST request
+    response = requests.post(url, headers=headers, json=subs)
+
+    return response.status_code
+
+# bayengage_integration('988925cac9ce56992deb15eb71daad63','727f10444e1a', data)
 
 
 def klayviyo_integration(api_key, data):
