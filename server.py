@@ -1174,21 +1174,19 @@ def data_changed():
     data = request.get_json()
     company_id = data.get('company_id')
 
-    # create_df_file_from_db(company_id)
-    # update_company_counts(company_id)
-    # update_popular_chart(company_id)
-    # update_by_percent(company_id)
+    create_df_file_from_db(company_id)
+    update_company_counts(company_id)
+    update_popular_chart(company_id)
+    update_by_percent(company_id)
 
-    # segments = SEGMENT_COLLECTION.find({'attached_company'  : company_id})
-    # for segment in segments:
-    #     filter_query = build_filter(company_id,segment['filters'])
-    #     create_df_file_from_db(company_id,segment["_id"],segment['filters'])
-    #     update_company_counts(company_id,segment['_id'],filter_query)
-    #     update_popular_chart(company_id,segment['_id'],filter_query)
-    #     update_by_percent(company_id,segment['_id'],filter_query)
+    segments = SEGMENT_COLLECTION.find({'attached_company'  : company_id})
+    for segment in segments:
+        filter_query = build_filter(company_id,segment['filters'])
+        create_df_file_from_db(company_id,segment["_id"],segment['filters'])
+        update_company_counts(company_id,segment['_id'],filter_query)
+        update_popular_chart(company_id,segment['_id'],filter_query)
+        update_by_percent(company_id,segment['_id'],filter_query)
     for user in USER_COLLECTION.find({'companies': company_id}):
-       print(user)
-       print(user["integrations"])
        if user["integrations"]:
            for integration in user["integrations"]:
                update_integration(
