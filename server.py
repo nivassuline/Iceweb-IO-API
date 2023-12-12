@@ -107,8 +107,13 @@ def get_integration(integration_name):
         return omnisend_integration
     
 
-
-
+def calculate_percentage(value, total, decimal_places=2):
+    try:
+        percentage = (value / total) * 100
+        formatted_percentage = f"{percentage:.{decimal_places}f}"
+        return formatted_percentage
+    except ZeroDivisionError:
+        return "Error: Total cannot be zero."
 
 
     # Function to convert camelCase to snake_case
@@ -383,9 +388,29 @@ def get_most_popular(table_name, date_range_query, popular_type, state=None,filt
 
                 result = connection.execute(query)
 
-                for row in result:
-                    item_list.append(row[0])
-                    count_list.append(row[1])
+                total = 0
+                count_list_new = []
+                if popular_type == 'income_levels':
+                    for row in result:
+                        if row[0] == '-' or 'Unknown' in row[0]:
+                            pass
+                        else:
+                            numbers = re.findall(r'\d+', row[0])
+                            print(numbers)
+                            if '150' in numbers and len(numbers) == 1:
+                                item_list.append('Greater Then 150K')
+                            elif '30' in numbers and len(numbers) == 1:
+                                item_list.append('Less Then 30K')
+                            elif len(numbers) == 2:
+                                item_list.append(f'{numbers[0]}K-{numbers[1]}K')
+                            total += int(row[1])
+                            count_list_new.append(row[1])
+                    for count in count_list_new:
+                        count_list.append(calculate_percentage(count,total))
+                else:
+                    for row in result:
+                        item_list.append(row[0])
+                        count_list.append(row[1])
     else:
          with ENGINE.connect() as connection:
             if popular_type == 'hour':
@@ -431,47 +456,6 @@ def get_most_popular(table_name, date_range_query, popular_type, state=None,filt
                 for row in result:
                     item_list.append(row[0])
                     count_list.append(row[1])
-            # elif popular_type == 'credit_range' or popular_type == 'income_levels':
-            #     query = text(f"""
-            #         SELECT {popular_type} as item, COUNT(*) as count
-            #         FROM {table_name}
-            #         WHERE {date_range_query}
-            #         GROUP BY {popular_type}
-            #         ORDER BY count DESC
-            #     """)
-
-            #     result = connection.execute(query)
-
-            #     for row in result:
-            #         numbers = re.findall(r'\d+', row[0])
-            #         if popular_type == 'credit_range':
-            #             if 800 in numbers:
-            #                 count_range = [800, 950]
-            #             elif 499 in numbers:
-            #                 count_range = [0,499]
-            #             else:
-            #                 if numbers:
-            #                     count_range = numbers
-            #                 else:
-            #                     count_range = [0,0]
-            #         if popular_type == 'income_levels':
-            #             if 'LT' in row[0]:
-            #                 count_range = [0, 30000]
-            #             elif 'GT' in row[0]:
-            #                 count_range = [150000, 1000000]
-            #             else:
-            #                 if numbers:
-            #                     count_range = [int(numbers[0]) * 1000, int(numbers[1]) * 1000]
-            #                 else:
-            #                     count_range = [0, 0]
-            #         item_list.append({
-            #             'x': row[0],
-            #             'y': count_range
-            #         })
-            #         count_list.append({
-            #             'x': row[0],
-            #             'y': math.floor((int(count_range[0]) + int(count_range[-1])) / 2)
-            #         })
             else:
                 query = text(f"""
                     SELECT {popular_type} as item, COUNT(*) as count
@@ -484,9 +468,30 @@ def get_most_popular(table_name, date_range_query, popular_type, state=None,filt
 
                 result = connection.execute(query)
 
-                for row in result:
-                    item_list.append(row[0])
-                    count_list.append(row[1])
+                total = 0
+                count_list_new = []
+                if popular_type == 'income_levels':
+                    for row in result:
+                        if row[0] == '-' or 'Unknown' in row[0]:
+                            pass
+                        else:
+                            numbers = re.findall(r'\d+', row[0])
+                            print(numbers)
+                            if '150' in numbers and len(numbers) == 1:
+                                item_list.append('Greater Then 150K')
+                            elif '30' in numbers and len(numbers) == 1:
+                                item_list.append('Less Then 30K')
+                            elif len(numbers) == 2:
+                                item_list.append(f'{numbers[0]}K-{numbers[1]}K')
+                            total += int(row[1])
+                            count_list_new.append(row[1])
+                    for count in count_list_new:
+                        count_list.append(calculate_percentage(count,total))
+                else:
+                    for row in result:
+                        item_list.append(row[0])
+                        count_list.append(row[1])
+
 
     return item_list, count_list
 
@@ -536,11 +541,17 @@ def get_by_precent_count(table_name, field, date_range_query,filter_query=None):
             result = connection.execute(query)
 
             for row in result:
-                if row[0] == '-' or row[0] == 'Unknown':
+                if row[0] == '-' or 'Unknown' in row[0]:
                     pass
                 else:
-                    item_list.append(row[0])
-                    count_list.append(row[1])
+                    if field == 'credit_range':
+                        numbers = re.findall(r'\d+', row[0])
+                        output_string = '-'.join(numbers)
+                        item_list.append(output_string)
+                        count_list.append(row[1])
+                    else:
+                        item_list.append(row[0])
+                        count_list.append(row[1])
     else:
         with ENGINE.connect() as connection:
             if field == 'age':
@@ -583,12 +594,17 @@ def get_by_precent_count(table_name, field, date_range_query,filter_query=None):
             result = connection.execute(query)
 
             for row in result:
-                if row[0] == '-' or row[0] == 'Unknown':
+                if row[0] == '-' or 'Unknown' in row[0]:
                     pass
                 else:
-                    item_list.append(row[0])
-                    count_list.append(row[1])
-
+                    if field == 'credit_range':
+                        numbers = re.findall(r'\d+', row[0])
+                        output_string = '-'.join(numbers)
+                        item_list.append(output_string)
+                        count_list.append(row[1])
+                    else:
+                        item_list.append(row[0])
+                        count_list.append(row[1])
     return item_list, count_list
 
 
@@ -890,7 +906,7 @@ def update_company_counts(company_id,segment_id=None,filter_query=None):
 
 def update_popular_chart(company_id, segment_id=None, filter_query=None):
     popular_chart = {}
-    popular_types = ['hour', 'url','state']
+    popular_types = ['hour', 'url','state','income_levels']
 
     if segment_id:
         with ENGINE.connect() as connection:
@@ -900,13 +916,12 @@ def update_popular_chart(company_id, segment_id=None, filter_query=None):
 
                 if popular_type == 'hour':
                     query = text(f"""
-                        SELECT SUBSTRING(hour, 1, 2) AS hour,
-                                COUNT(*) AS count
-                        FROM {company_id}
-                        WHERE {filter_query}
-                        GROUP BY hour
-                        ORDER BY count DESC
-                        LIMIT 10
+                    SELECT substr(hour, 1, 2) as hour_part, COUNT(*) as count
+                    FROM {company_id}
+                    WHERE {filter_query}
+                    GROUP BY hour_part
+                    ORDER BY count DESC
+                    LIMIT 10
                     """)
 
                     result = connection.execute(query).fetchall()
@@ -948,6 +963,40 @@ def update_popular_chart(company_id, segment_id=None, filter_query=None):
                         count_list.append(item[1])
 
 
+                elif popular_type == 'income_levels':
+                    total = 0
+                    count_list_new = []
+                    query = text(f"""
+                        SELECT {popular_type} as item, COUNT(*) as count
+                        FROM {company_id}
+                        WHERE {filter_query}
+                        GROUP BY {popular_type}
+                        ORDER BY count DESC
+                        LIMIT 10
+                        """)
+
+                    result = connection.execute(query).fetchall()
+                    for row in result:
+                        if row[0] == '-' or 'Unknown' in row[0]:
+                            pass
+                        else:
+                            numbers = re.findall(r'\d+', row[0])
+                            print(numbers)
+                            if '150' in numbers and len(numbers) == 1:
+                                item_list.append('Greater Then 150K')
+                            elif '30' in numbers and len(numbers) == 1:
+                                item_list.append('Less Then 30K')
+                            elif len(numbers) == 2:
+                                item_list.append(f'{numbers[0]}K-{numbers[1]}K')
+                            total += int(row[1])
+                            count_list_new.append(row[1])
+                    for count in count_list_new:
+                        count_list.append(calculate_percentage(count,total))
+                else:
+                    for row in result:
+                        item_list.append(row[0])
+                        count_list.append(row[1])
+
                 popular_chart[popular_type] = {
                     'item_list': item_list,
                     'count_list': count_list
@@ -962,17 +1011,17 @@ def update_popular_chart(company_id, segment_id=None, filter_query=None):
 
                 if popular_type == 'hour':
                     query = text(f"""
-                        SELECT SUBSTRING(hour, 1, 2) AS hour,
-                                COUNT(*) AS count
-                        FROM {company_id}
-                        GROUP BY hour
-                        ORDER BY count DESC
-                        LIMIT 10
-                    """)
+                    SELECT substr(hour, 1, 2) as hour_part, COUNT(*) as count
+                    FROM {company_id}
+                    GROUP BY hour_part
+                    ORDER BY count DESC
+                    LIMIT 10
+                """)
 
                     result = connection.execute(query).fetchall()
 
                     for item in result:
+                        print(item)
                         item_list.append(convert_to_user_friendly_time(item[0]))
                         count_list.append(item[1])
                 
@@ -1006,12 +1055,43 @@ def update_popular_chart(company_id, segment_id=None, filter_query=None):
                         item_list.append(item[0])
                         count_list.append(item[1])
 
+                elif popular_type == 'income_levels':
+                    total = 0
+                    count_list_new = []
+                    query = text(f"""
+                        SELECT {popular_type} as item, COUNT(*) as count
+                        FROM {company_id}
+                        GROUP BY {popular_type}
+                        ORDER BY count DESC
+                        LIMIT 10
+                        """)
+
+                    result = connection.execute(query).fetchall()
+                    for row in result:
+                        if row[0] == '-' or 'Unknown' in row[0]:
+                            pass
+                        else:
+                            numbers = re.findall(r'\d+', row[0])
+                            print(numbers)
+                            if '150' in numbers and len(numbers) == 1:
+                                item_list.append('Greater Then 150K')
+                            elif '30' in numbers and len(numbers) == 1:
+                                item_list.append('Less Then 30K')
+                            elif len(numbers) == 2:
+                                item_list.append(f'{numbers[0]}K-{numbers[1]}K')
+                            total += int(row[1])
+                            count_list_new.append(row[1])
+                    for count in count_list_new:
+                        count_list.append(calculate_percentage(count,total))
+                else:
+                    for row in result:
+                        item_list.append(row[0])
+                        count_list.append(row[1])
 
                 popular_chart[popular_type] = {
                     'item_list': item_list,
                     'count_list': count_list
                 }
-
         COMPANIES_COLLECTION.update_one({'_id': company_id}, {'$set': {'popular_chart': popular_chart}})
 
 def update_by_percent(company_id, segment_id=None, filter_query=None):
@@ -1062,19 +1142,25 @@ def update_by_percent(company_id, segment_id=None, filter_query=None):
                         LIMIT 10
                     """)
 
-                result = connection.execute(query).fetchall()
+                result = connection.execute(query)
 
-                for item in result:
-                    if item[0] == '-' or item[0] == 'Unknown':
+                for row in result:
+                    if row[0] == '-' or 'Unknown' in row[0]:
                         pass
                     else:
-                        item_list.append(item[0])
-                        count_list.append(item[1])
+                        if field == 'credit_range':
+                            numbers = re.findall(r'\d+', row[0])
+                            output_string = '-'.join(numbers)
+                            item_list.append(output_string)
+                            count_list.append(row[1])
+                        else:
+                            item_list.append(row[0])
+                            count_list.append(row[1])
 
-                by_percent_chart[field] = {
-                    'item_list': item_list,
-                    'count_list': count_list
-                }
+                    by_percent_chart[field] = {
+                        'item_list': item_list,
+                        'count_list': count_list
+                    }
 
         SEGMENT_COLLECTION.update_one({'_id': segment_id}, {'$set': {'by_percent_chart': by_percent_chart}})
     else:
@@ -1118,19 +1204,26 @@ def update_by_percent(company_id, segment_id=None, filter_query=None):
                         LIMIT 10
                     """)
 
-                result = connection.execute(query).fetchall()
+                result = connection.execute(query)
 
-                for item in result:
-                    if item[0] == '-' or item[0] == 'Unknown':
+                for row in result:
+                    print(row)
+                    if row[0] == '-' or 'Unknown' in row[0]:
                         pass
                     else:
-                        item_list.append(item[0])
-                        count_list.append(item[1])
+                        if field == 'credit_range':
+                            numbers = re.findall(r'\d+', row[0])
+                            output_string = '-'.join(numbers)
+                            item_list.append(output_string)
+                            count_list.append(row[1])
+                        else:
+                            item_list.append(row[0])
+                            count_list.append(row[1])
 
-                by_percent_chart[field] = {
-                    'item_list': item_list,
-                    'count_list': count_list
-                }
+                    by_percent_chart[field] = {
+                        'item_list': item_list,
+                        'count_list': count_list
+                    }
 
         COMPANIES_COLLECTION.update_one({'_id': company_id}, {'$set': {'by_percent_chart': by_percent_chart}})
 
@@ -1245,7 +1338,9 @@ def data_changed():
                 integration["api_key"],
                 integration["integration_name"],
                 integration["site_id"],
-                integration["list_id"]
+                integration["list_id"],
+                integration["client_secret"],
+                integration["public_id"]
                 )
 
     return jsonify('done!')
@@ -1399,15 +1494,12 @@ def add_integration():
             "id": integration_id,
             "integration_name": integration_name,
             "attached_company": company_id,
-            "api_key": api_key
+            "api_key": api_key,
+            "site_id":site_id,
+            "list_id":list_id,
+            "client_secret" : client_secret,
+            "public_id": public_id
         }
-        if site_id:
-            new_integration["site_id"] = site_id
-        if list_id:
-            new_integration["list_id"] = list_id
-        if client_secret and public_id:
-            new_integration["client_secret"] = client_secret
-            new_integration["public_id"] = public_id
         
         if segment_id:
             SEGMENT_COLLECTION.update_one({'_id': segment_id} , {'$push' : {'integrations' : new_integration}})
@@ -2296,7 +2388,6 @@ def internal_error(error):
     print(error)
 
     return jsonify("Not Found")
-
 
 
 # def update_excluded_users(segment_id):
