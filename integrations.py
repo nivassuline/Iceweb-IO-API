@@ -696,3 +696,101 @@ def emailoctopus_integration(api_key, list_id, data,test=None):
 
 # emailoctopus_integration('9d824b7b-3f8e-470f-b069-3bcaa586a733','485ed3f4-92bd-11ee-9568-ed37a2e1a062',data)
 
+
+# url = "https://YOUR_SUBDOMAIN.rest.marketingcloudapis.com/contacts/v1/contacts"
+# headers = {
+#     "Content-Type": "application/json",
+#     "Authorization": "Bearer YOUR_ACCESS_TOKEN"
+# }
+
+# data = {
+#     "contactKey": "acruz@example.com",
+#     "attributeSets": [
+#         {
+#             "name": "Email Addresses",
+#             "items": [
+#                 {
+#                     "values": [
+#                         {"name": "Email Address", "value": "acruz@example.com"},
+#                         {"name": "HTML Enabled", "value": True}
+#                     ]
+#                 }
+#             ]
+#         },
+#         {
+#             "name": "Email Demographics",
+#             "items": [
+#                 {
+#                     "values": [
+#                         {"name": "Last Name", "value": "Cruz"},
+#                         {"name": "First Name", "value": "Angela"},
+#                         {"name": "Text Profile Attribute", "value": "value 1"},
+#                         {"name": "Number Profile Attribute", "value": 12345}
+#                     ]
+#                 }
+#             ]
+#         },
+#         {
+#             "name": "MobileConnect Demographics",
+#             "items": [
+#                 {
+#                     "values": [
+#                         {"name": "Mobile Number", "value": "317-531-5555"},
+#                         {"name": "Locale", "value": "US"},
+#                         {"name": "Status", "value": 1}
+#                     ]
+#                 }
+#             ]
+#         },
+#         {
+#             "name": "MobilePush Demographics",
+#             "items": [
+#                 {
+#                     "values": [
+#                         {"name": "Device ID", "value": 958405948},
+#                         {"name": "Application", "value": 958405948}
+#                     ]
+#                 }
+#             ]
+#         },
+#         {
+#             "name": "GroupConnect LINE Addresses",
+#             "items": [
+#                 {
+#                     "values": [
+#                         {"name": "Address ID", "value": "addressId_from_api"}
+#                     ]
+#                 }
+#             ]
+#         },
+#         {
+#             "name": "GroupConnect LINE Subscriptions",
+#             "items": [
+#                 {
+#                     "values": [
+#                         {"name": "Address ID", "value": "addressId_from_api"},
+#                         {"name": "Channel ID", "value": "1234567890"}
+#                     ]
+#                 }
+#             ]
+#         },
+#         {
+#             "name": "GroupConnect LINE Demographics",
+#             "items": [
+#                 {
+#                     "values": [
+#                         {"name": "Address ID", "value": "addressId_from_api"},
+#                         {"name": "Display Name", "value": "display_name"},
+#                         {"name": "Picture Url", "value": "picture_url"},
+#                         {"name": "Status Message", "value": "status_message"}
+#                     ]
+#                 }
+#             ]
+#         }
+#     ]
+# }
+
+# response = requests.post(url, json=data, headers=headers)
+
+# print("Response Status Code:", response.status_code)
+# print("Response Content:", response.text)
