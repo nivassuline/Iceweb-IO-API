@@ -1,39 +1,29 @@
-from datetime import datetime, timedelta
-from flask import Flask, request,jsonify,  Response, make_response
+from datetime import datetime
+from flask import Flask, request, jsonify, make_response
 from flask_bcrypt import Bcrypt
 from urllib.parse import urlparse
 from pymongo import MongoClient
 from bson import json_util
-from datetime import datetime, date
+from datetime import datetime
 import pandas as pd
 from flask_cors import CORS
 import random
 import json
-import hashlib
 import uuid
 import jwt
 import re
-import threading
 import pandas as pd
 import psycopg2
-from psycopg2 import pool, sql
-from sqlalchemy import create_engine, text, MetaData, Table, Column, Text
+from sqlalchemy import create_engine, text
 import os
-from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
-import io
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.combining import OrTrigger
-from apscheduler.triggers.cron import CronTrigger
-import apscheduler.jobstores.base
-import math
 from integrations import *
-# from google.auth.transport.requests import Request
-# from google.auth.credentials import AnonymousCredentials
-# from google.auth.transport.requests import Request
-# from google.auth import jwt
-# from google.ads.googleads.client import GoogleAdsClient
-
-
+from azure_functions import *
+from postgres_functions import *
+from app_functions import *
+from update_functions import *
+from get_functions import *
+from build_functions import *
 
 app = Flask(__name__)
 CORS(app)
@@ -41,1272 +31,58 @@ bcrypt = Bcrypt(app)
 scheduler = BackgroundScheduler()
 scheduler.start()
 
-
-
-
-# DB_CONNECTOR = MongoClient("mongodb://icewebniv:G3ccZpGQXvs6mVdsYuTCEfk3EuDKTdASUsNyEi6HCFoFp7Af3ESn0asd80pDRIP1w51FILE3QvdYACDbYY0n4g==@icewebniv.mongo.cosmos.azure.com:10255/?ssl=true&retrywrites=false&replicaSet=globaldb&maxIdleTimeMS=120000&appName=@icewebniv@")
-
 POSTGRES_CONN_STRING = 'host=c-icewebio-postgres.tfgc42d4iqjg72.postgres.cosmos.azure.com port=5432 dbname=citus user=citus password=iceWeb1234 sslmode=require'
-
-database_uri = "postgresql://citus:iceWeb1234@c-icewebio-postgres.tfgc42d4iqjg72.postgres.cosmos.azure.com:5432/citus"
-
-POSTGRES_CONNECTION = psycopg2.pool.SimpleConnectionPool(1, 20, 'host=c-icewebio-postgres.tfgc42d4iqjg72.postgres.cosmos.azure.com port=5432 dbname=citus user=citus password=iceWeb1234 sslmode=require')
-
-ENGINE = create_engine(database_uri, pool_size=20, max_overflow=10)
-
-
+POSTGRES_DATABASE_URI = "postgresql://citus:iceWeb1234@c-icewebio-postgres.tfgc42d4iqjg72.postgres.cosmos.azure.com:5432/citus"
+POSTGRES_CONNECTION = psycopg2.pool.SimpleConnectionPool(
+    1, 20, 'host=c-icewebio-postgres.tfgc42d4iqjg72.postgres.cosmos.azure.com port=5432 dbname=citus user=citus password=iceWeb1234 sslmode=require')
 DB_CONNECTOR = MongoClient(
     "mongodb://icwebio:yJtwZocIwp8tZ4CQGAnRVvBxCv2i3bGIDHa3Za7w6sP3ww5I5Bgm8e1OpSSMbvdLIpEh7KDeWX4WACDbtUkLGw==@icwebio.mongo.cosmos.azure.com:10255/?ssl=true&replicaSet=globaldb&retrywrites=false&maxIdleTimeMS=120000&appName=@icwebio@")
+
 DB_CLIENT = DB_CONNECTOR['main']
 ADMIN_DB = DB_CONNECTOR
-DB_CLIENT.command("enableSharding", "main")
 COMPANIES_COLLECTION = DB_CLIENT['companies']
 USER_COLLECTION = DB_CLIENT['users']
 ROLE_COLLECTION = DB_CLIENT['roles']
 SEGMENT_COLLECTION = DB_CLIENT['segments']
 INTEGRATION_COLLECTION = DB_CLIENT['integrations']
-
 SECRET_KEY = 'iceweb123456789'
+AZURE_ACCOUNT_URL = "https://icewebstorage.blob.core.windows.net"
+AZURE_CONNECTION_BLOB_STRING = "zQNgBDFROUur92AMQIDwSoIm3Fswg4rCmjHniH3wvIMLnP8ewXdBISHa1yCxG/obFJHufoAlo/NZ+ASt5bMcvg=="
+AZURE_CONTAINER_NAME = "icewebio"
+ITEMS_PER_PAGE = 13
+
+ENGINE = create_engine(POSTGRES_DATABASE_URI, pool_size=20, max_overflow=10)
+DB_CLIENT.command("enableSharding", "main")
+
+
 
 DESIRED_COLUNMS_ORDER = ["date", "id", "hour", "fullName", "firstName", "lastName", "url", "facebook", "linkedIn", "twitter", "email", "optIn", "optInDate", "optInIp", "optInUrl", "pixelFirstHitDate", "pixelLastHitDate", "bebacks", "phone", "dnc", "age", "gender", "maritalStatus", "address", "city", "state", "zip", "householdIncome", "netWorth", "incomeLevels", "peopleInHousehold", "adultsInHousehold", "childrenInHousehold", "veteransInHousehold", "education", "creditRange", "ethnicGroup", "generation", "homeOwner", "occupationDetail", "politicalParty", "religion", "childrenBetweenAges0_3", "childrenBetweenAges4_6", "childrenBetweenAges7_9",
                          "childrenBetweenAges10_12", "childrenBetweenAges13_18", "behaviors", "childrenAgeRanges", "interests", "ownsAmexCard", "ownsBankCard", "dwellingType", "homeHeatType", "homePrice", "homePurchasedYearsAgo", "homeValue", "householdNetWorth", "language", "mortgageAge", "mortgageAmount", "mortgageLoanType", "mortgageRefinanceAge", "mortgageRefinanceAmount", "mortgageRefinanceType", "isMultilingual", "newCreditOfferedHousehold", "numberOfVehiclesInHousehold", "ownsInvestment", "ownsPremiumAmexCard", "ownsPremiumCard", "ownsStocksAndBonds", "personality", "isPoliticalContributor", "isVoter", "premiumIncomeHousehold", "urbanicity", "maid", "maidOs"]
 
-COLUMNS_ORDER = ['date','date_added', 'url', 'full_name', 'first_name', 'last_name', 'facebook', 'linked_in', 'twitter', 'email', 'opt_in', 'opt_in_date', 'opt_in_ip', 'opt_in_url', 'pixel_first_hit_date', 'pixel_last_hit_date', 'bebacks', 'phone', 'dnc', 'age', 'gender', 'marital_status', 'address', 'city', 'state', 'zip', 'household_income', 'net_worth', 'income_levels', 'people_in_household', 'adults_in_household', 'children_in_household', 'veterans_in_household', 'education', 'credit_range', 'ethnic_group', 'generation', 'home_owner', 'occupation_detail', 'political_party', 'religion', 'children_between_ages0_3', 'children_between_ages4_6', 'children_between_ages7_9', 'children_between_ages10_12', 'children_between_ages13_18', 'behaviors', 'children_age_ranges', 'interests', 'owns_amex_card', 'owns_bank_card', 'dwelling_type', 'home_heat_type', 'home_price', 'home_purchased_years_ago', 'home_value', 'household_net_worth', 'language', 'mortgage_age', 'mortgage_amount', 'mortgage_loan_type', 'mortgage_refinance_age', 'mortgage_refinance_amount', 'mortgage_refinance_type', 'is_multilingual', 'new_credit_offered_household', 'number_of_vehicles_in_household', 'owns_investment', 'owns_premium_amex_card', 'owns_premium_card', 'owns_stocks_and_bonds', 'personality', 'is_political_contributor', 'is_voter', 'premium_income_household', 'urbanicity', 'maid', 'maid_os', 'hour']
+COLUMNS_ORDER = ['date', 'date_added', 'url', 'full_name', 'first_name', 'last_name', 'facebook', 'linked_in', 'twitter', 'email', 'opt_in', 'opt_in_date', 'opt_in_ip', 'opt_in_url', 'pixel_first_hit_date', 'pixel_last_hit_date', 'bebacks', 'phone', 'dnc', 'age', 'gender', 'marital_status', 'address', 'city', 'state', 'zip', 'household_income', 'net_worth', 'income_levels', 'people_in_household', 'adults_in_household', 'children_in_household', 'veterans_in_household', 'education', 'credit_range', 'ethnic_group', 'generation', 'home_owner', 'occupation_detail', 'political_party', 'religion', 'children_between_ages0_3', 'children_between_ages4_6', 'children_between_ages7_9', 'children_between_ages10_12',
+                 'children_between_ages13_18', 'behaviors', 'children_age_ranges', 'interests', 'owns_amex_card', 'owns_bank_card', 'dwelling_type', 'home_heat_type', 'home_price', 'home_purchased_years_ago', 'home_value', 'household_net_worth', 'language', 'mortgage_age', 'mortgage_amount', 'mortgage_loan_type', 'mortgage_refinance_age', 'mortgage_refinance_amount', 'mortgage_refinance_type', 'is_multilingual', 'new_credit_offered_household', 'number_of_vehicles_in_household', 'owns_investment', 'owns_premium_amex_card', 'owns_premium_card', 'owns_stocks_and_bonds', 'personality', 'is_political_contributor', 'is_voter', 'premium_income_household', 'urbanicity', 'maid', 'maid_os', 'hour']
 
+desired_columns_order_journey = ['date', 'date_added', 'hour', "url", "full_name", "firstName", "lastName", "facebook", "linkedIn", "twitter", "email", "optIn", "optInDate", "optInIp", "optInUrl", "pixelFirstHitDate", "pixelLastHitDate", "bebacks", "phone", "dnc", "age", "gender", "maritalStatus", "address", "city", "state", "zip", "householdIncome", "netWorth", "incomeLevels", "peopleInHousehold", "adultsInHousehold", "childrenInHousehold", "veteransInHousehold", "education", "creditRange", "ethnicGroup", "generation", "homeOwner", "occupationDetail", "politicalParty", "religion", "childrenBetweenAges0_3", "childrenBetweenAges4_6", "childrenBetweenAges7_9",
+                                 "childrenBetweenAges10_12", "childrenBetweenAges13_18", "behaviors", "childrenAgeRanges", "interests", "ownsAmexCard", "ownsBankCard", "dwellingType", "homeHeatType", "homePrice", "homePurchasedYearsAgo", "homeValue", "householdNetWorth", "language", "mortgageAge", "mortgageAmount", "mortgageLoanType", "mortgageRefinanceAge", "mortgageRefinanceAmount", "mortgageRefinanceType", "isMultilingual", "newCreditOfferedHousehold", "numberOfVehiclesInHousehold", "ownsInvestment", "ownsPremiumAmexCard", "ownsPremiumCard", "ownsStocksAndBonds", "personality", "isPoliticalContributor", "isVoter", "premiumIncomeHousehold", "urbanicity", "maid", "maidOs"]
 
-desired_columns_order_journey = ['date','date_added','hour',"url","full_name","firstName","lastName","facebook","linkedIn","twitter","email","optIn","optInDate","optInIp","optInUrl","pixelFirstHitDate","pixelLastHitDate","bebacks","phone","dnc","age","gender","maritalStatus","address","city","state","zip","householdIncome","netWorth","incomeLevels","peopleInHousehold","adultsInHousehold","childrenInHousehold","veteransInHousehold","education","creditRange","ethnicGroup","generation","homeOwner","occupationDetail","politicalParty","religion","childrenBetweenAges0_3","childrenBetweenAges4_6","childrenBetweenAges7_9","childrenBetweenAges10_12","childrenBetweenAges13_18","behaviors","childrenAgeRanges","interests","ownsAmexCard","ownsBankCard","dwellingType","homeHeatType","homePrice","homePurchasedYearsAgo","homeValue","householdNetWorth","language","mortgageAge","mortgageAmount","mortgageLoanType","mortgageRefinanceAge","mortgageRefinanceAmount","mortgageRefinanceType","isMultilingual","newCreditOfferedHousehold","numberOfVehiclesInHousehold","ownsInvestment","ownsPremiumAmexCard","ownsPremiumCard","ownsStocksAndBonds","personality","isPoliticalContributor","isVoter","premiumIncomeHousehold","urbanicity","maid","maidOs"] 
+JOURNEY_FILE_COLUMNS_ORDER = ['date', 'date_added', 'hour', 'full_name', 'url', 'facebook', 'linked_in', 'twitter', 'email', 'opt_in', 'opt_in_date', 'opt_in_ip', 'opt_in_url', 'pixel_first_hit_date', 'pixel_last_hit_date', 'bebacks', 'phone', 'dnc', 'age', 'gender', 'marital_status', 'address', 'city', 'state', 'zip', 'household_income', 'net_worth', 'income_levels', 'people_in_household', 'adults_in_household', 'children_in_household', 'veterans_in_household', 'education', 'credit_range', 'ethnic_group', 'generation', 'home_owner', 'occupation_detail', 'political_party', 'religion', 'children_between_ages0_3', 'children_between_ages4_6', 'children_between_ages7_9',
+                              'children_between_ages10_12', 'children_between_ages13_18', 'behaviors', 'children_age_ranges', 'interests', 'owns_amex_card', 'owns_bank_card', 'dwelling_type', 'home_heat_type', 'home_price', 'home_purchased_years_ago', 'home_value', 'household_net_worth', 'language', 'mortgage_age', 'mortgage_amount', 'mortgage_loan_type', 'mortgage_refinance_age', 'mortgage_refinance_amount', 'mortgage_refinance_type', 'is_multilingual', 'new_credit_offered_household', 'number_of_vehicles_in_household', 'owns_investment', 'owns_premium_amex_card', 'owns_premium_card', 'owns_stocks_and_bonds', 'personality', 'is_political_contributor', 'is_voter', 'premium_income_household', 'urbanicity', 'maid', 'maid_os']
 
-JOURNEY_FILE_COLUMNS_ORDER = ['date', 'date_added', 'hour','full_name','url', 'facebook', 'linked_in', 'twitter', 'email', 'opt_in', 'opt_in_date', 'opt_in_ip', 'opt_in_url', 'pixel_first_hit_date', 'pixel_last_hit_date', 'bebacks', 'phone', 'dnc', 'age', 'gender', 'marital_status', 'address', 'city', 'state', 'zip', 'household_income', 'net_worth', 'income_levels', 'people_in_household', 'adults_in_household', 'children_in_household', 'veterans_in_household', 'education', 'credit_range', 'ethnic_group', 'generation', 'home_owner', 'occupation_detail', 'political_party', 'religion', 'children_between_ages0_3', 'children_between_ages4_6', 'children_between_ages7_9', 'children_between_ages10_12', 'children_between_ages13_18', 'behaviors', 'children_age_ranges', 'interests', 'owns_amex_card', 'owns_bank_card', 'dwelling_type', 'home_heat_type', 'home_price', 'home_purchased_years_ago', 'home_value', 'household_net_worth', 'language', 'mortgage_age', 'mortgage_amount', 'mortgage_loan_type', 'mortgage_refinance_age', 'mortgage_refinance_amount', 'mortgage_refinance_type', 'is_multilingual', 'new_credit_offered_household', 'number_of_vehicles_in_household', 'owns_investment', 'owns_premium_amex_card', 'owns_premium_card', 'owns_stocks_and_bonds', 'personality', 'is_political_contributor', 'is_voter', 'premium_income_household', 'urbanicity', 'maid', 'maid_os']
+USERS_FILE_COLUMNS_ORDER = ['date', 'date_added', 'full_name', 'email', 'facebook', 'linked_in', 'twitter', 'opt_in', 'opt_in_date', 'opt_in_ip', 'opt_in_url', 'pixel_first_hit_date', 'pixel_last_hit_date', 'bebacks', 'phone', 'dnc', 'age', 'gender', 'marital_status', 'address', 'city', 'state', 'zip', 'household_income', 'net_worth', 'income_levels', 'people_in_household', 'adults_in_household', 'children_in_household', 'veterans_in_household', 'education', 'credit_range', 'ethnic_group', 'generation', 'home_owner', 'occupation_detail', 'political_party', 'religion', 'children_between_ages0_3', 'children_between_ages4_6', 'children_between_ages7_9',
+                            'children_between_ages10_12', 'children_between_ages13_18', 'behaviors', 'children_age_ranges', 'interests', 'owns_amex_card', 'owns_bank_card', 'dwelling_type', 'home_heat_type', 'home_price', 'home_purchased_years_ago', 'home_value', 'household_net_worth', 'language', 'mortgage_age', 'mortgage_amount', 'mortgage_loan_type', 'mortgage_refinance_age', 'mortgage_refinance_amount', 'mortgage_refinance_type', 'is_multilingual', 'new_credit_offered_household', 'number_of_vehicles_in_household', 'owns_investment', 'owns_premium_amex_card', 'owns_premium_card', 'owns_stocks_and_bonds', 'personality', 'is_political_contributor', 'is_voter', 'premium_income_household', 'urbanicity']
 
-USERS_FILE_COLUMNS_ORDER = ['date', 'date_added', 'full_name', 'email','facebook', 'linked_in', 'twitter', 'opt_in', 'opt_in_date', 'opt_in_ip', 'opt_in_url', 'pixel_first_hit_date', 'pixel_last_hit_date', 'bebacks', 'phone', 'dnc', 'age', 'gender', 'marital_status', 'address', 'city', 'state', 'zip', 'household_income', 'net_worth', 'income_levels', 'people_in_household', 'adults_in_household', 'children_in_household', 'veterans_in_household', 'education', 'credit_range', 'ethnic_group', 'generation', 'home_owner', 'occupation_detail', 'political_party', 'religion', 'children_between_ages0_3', 'children_between_ages4_6', 'children_between_ages7_9', 'children_between_ages10_12', 'children_between_ages13_18', 'behaviors', 'children_age_ranges', 'interests', 'owns_amex_card', 'owns_bank_card', 'dwelling_type', 'home_heat_type', 'home_price', 'home_purchased_years_ago', 'home_value', 'household_net_worth', 'language', 'mortgage_age', 'mortgage_amount', 'mortgage_loan_type', 'mortgage_refinance_age', 'mortgage_refinance_amount', 'mortgage_refinance_type', 'is_multilingual', 'new_credit_offered_household', 'number_of_vehicles_in_household', 'owns_investment', 'owns_premium_amex_card', 'owns_premium_card', 'owns_stocks_and_bonds', 'personality', 'is_political_contributor', 'is_voter', 'premium_income_household', 'urbanicity']
 
-ITEMS_PER_PAGE = 13
-
-AZURE_ACCOUNT_URL = "https://icewebstorage.blob.core.windows.net"
-AZURE_CONNECTION_BLOB_STRING = "zQNgBDFROUur92AMQIDwSoIm3Fswg4rCmjHniH3wvIMLnP8ewXdBISHa1yCxG/obFJHufoAlo/NZ+ASt5bMcvg=="
-AZURE_CONTAINER_NAME = "icewebio"
-
-
-
-
-
-def get_integration(integration_name):
-    if integration_name == 'Klaviyo':
-        return klayviyo_integration
-    elif integration_name == 'Customer.io':
-        return customerIO_integration
-    elif integration_name == 'Mailchimp':
-        return mailchimp_integration
-    elif integration_name == 'SendGrid':
-        return sendgrid_integration
-    elif integration_name == 'HubSpot':
-        return hubspot_integration
-    elif integration_name == 'EmailOctopus':
-        return emailoctopus_integration
-    elif integration_name == 'OmniSend':
-        return omnisend_integration
-    
-
-def calculate_percentage(value, total, decimal_places=2):
-    try:
-        percentage = (value / total) * 100
-        formatted_percentage = f"{percentage:.{decimal_places}f}"
-        return formatted_percentage
-    except ZeroDivisionError:
-        return "Error: Total cannot be zero."
-
-
-    # Function to convert camelCase to snake_case
-def camel_to_snake(column_name):
-        result = [column_name[0].lower()]
-        for char in column_name[1:]:
-            if char.isupper():
-                result.extend(['_', char.lower()])
-            else:
-                result.append(char)
-        return ''.join(result)
-
-
-def upload_to_azure_blob(blob_service_client, container_name, content, blob_name):
-    container_client = blob_service_client.get_container_client(container_name)
-    blob_client = container_client.get_blob_client(blob_name)
-
-    blob_client.upload_blob(content, overwrite=True)
-
-def delete_from_azure_blob(container_name,company_id, blob_name):
-    blob_service_client = BlobServiceClient(account_url=AZURE_ACCOUNT_URL, credential=AZURE_CONNECTION_BLOB_STRING)
-    container_client = blob_service_client.get_container_client(container_name)
-
-    print('aff')
-    
-    try:
-        # List all blobs in the container
-        blobs = container_client.walk_blobs(name_starts_with=f"{company_id}/")
-
-        print(blobs)
-
-        # Iterate through the blobs and delete those with the specified prefix
-        for blob in blobs:
-            print(blob)
-            if blob_name in blob.name:
-                blob_client = container_client.get_blob_client(blob.name)
-                blob_client.delete_blob()
-                print(f"Blob {blob.name} deleted successfully.")
-    except Exception as e:
-        print(f"Error deleting blobs {blob_name}: {str(e)}")
-
-
-def query_database(table_name, skip, limit):
-
-        query = text(f"SELECT * FROM {table_name} LIMIT {limit} OFFSET {skip};")
-
-        with ENGINE.connect() as connection:
-            result = connection.execute(query)
-            data = [dict(zip(COLUMNS_ORDER, row)) for row in result]
-
-        return data
-
-
-
-def create_postgres_table(table_name):
-    metadata = MetaData()
-
-    table = Table(
-        table_name,
-        metadata,
-        *[Column(column, Text) for column in COLUMNS_ORDER]
-    )
-
-    metadata.create_all(ENGINE)
-        
-    return 'done'
-
-def delete_postgres_table(table_name):
-    metadata = MetaData()
-
-    table = Table(table_name, metadata, autoload_with=ENGINE)
-
-    table.drop(ENGINE)
-
-def create_df_file_from_db(company_id,segment_id = None,filters=None):
-    blob_service_client = BlobServiceClient(account_url=AZURE_ACCOUNT_URL, credential=AZURE_CONNECTION_BLOB_STRING)
-
-    # directory_path = f'/companies/{company_id}'
-    file_types = ['users', 'journey']
-
-    if segment_id == None:
-        for file_type in file_types:
-            file_name = f'main-{file_type}.csv'
-            if file_type == 'users':
-                column_names_str = ', '.join(USERS_FILE_COLUMNS_ORDER)
-                query = text(f"SELECT DISTINCT ON (full_name) {column_names_str} FROM {company_id};")
-
-                with ENGINE.connect() as connection:
-                    data = connection.execute(query)
-                
-                df = pd.DataFrame(data, columns=USERS_FILE_COLUMNS_ORDER)
-                
-            if file_type == 'journey':
-                column_names_str = ', '.join(JOURNEY_FILE_COLUMNS_ORDER)
-
-                query = text(f"SELECT {column_names_str} FROM {company_id};")
-
-                with ENGINE.connect() as connection:
-                    data = connection.execute(query)
-                
-                df = pd.DataFrame(data, columns=JOURNEY_FILE_COLUMNS_ORDER)
-                
-            csv_content = df.to_csv(index=False)
-
-            blob_name = f'{company_id}/{file_name}'
-            upload_to_azure_blob(blob_service_client, AZURE_CONTAINER_NAME, io.BytesIO(csv_content.encode()), blob_name)
-
-    else:
-        filter_query = build_filter(company_id,filters)
-        for file_type in file_types:
-            file_name = f'{segment_id}-{file_type}.csv'
-            if file_type == 'users':
-                
-                column_names_str = ', '.join(USERS_FILE_COLUMNS_ORDER)
-                query = text(f"""
-                    SELECT DISTINCT ON (full_name) {column_names_str}
-                    FROM public.{company_id}
-                    WHERE ({filter_query})
-                """)
-
-
-                with ENGINE.connect() as connection:
-                    data = connection.execute(query)
-                
-                df = pd.DataFrame(data, columns=USERS_FILE_COLUMNS_ORDER)
-                
-            if file_type == 'journey':
-                column_names_str = ', '.join(JOURNEY_FILE_COLUMNS_ORDER)
-
-                query = text(f"""
-                    SELECT {column_names_str}
-                    FROM public.{company_id}
-                    WHERE ({filter_query})
-                """)
-
-
-                with ENGINE.connect() as connection:
-                    data = connection.execute(query)
-                
-                df = pd.DataFrame(data, columns=JOURNEY_FILE_COLUMNS_ORDER)
-                
-            csv_content = df.to_csv(index=False)
-
-            blob_name = f'{company_id}/{file_name}'
-            upload_to_azure_blob(blob_service_client, AZURE_CONTAINER_NAME, io.BytesIO(csv_content.encode()), blob_name)
-            print('uploaded!')
-    
-def generate_hashed_id(row):
-    # Convert the row to a string and generate a unique hash
-    row_string = str(row)
-    hashed_id = hashlib.sha1(row_string.encode()).hexdigest()
-    return hashed_id
-
-
-def insert_chunk(collection, records):
-    collection.insert_many(records)
-
-
-def generate_jwt_token(user_id, user_role):
-    # Define the payload of the token (typically contains user-related data)
-    payload = {
-        'user_id': user_id,
-        'user_role': user_role,
-        'exp': datetime.utcnow() + timedelta(hours=24)  # Token expiration time
-    }
-
-    # Generate the JWT token
-    token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
-
-    return token
-
-def convert_to_user_friendly_time(hour_str):
-    # Convert the hour string to an integer
-    hour = int(hour_str)
-
-    if 1 <= hour <= 11:
-        return f"{hour} AM"
-    elif hour == 12:
-        return f"{hour} PM"
-    elif 13 <= hour <= 23:
-        return f"{hour - 12} PM"
-    elif hour == 0:
-        return "12 AM"
-    else:
-        return "Invalid Hour"
-    
-def convert_to_user_friendly_age(age_str):
-    # Convert the hour string to an integer
-    age = float(age_str)
-
-    if 0 <= age <= 9:
-        return f"0 - 9"
-    elif 10 <= age <= 19:
-        return "10 - 19"
-    elif 20 <= age <= 29:
-        return "20 - 29"
-    elif 30 <= age <= 39:
-        return "30 - 39"
-    elif 40 <= age <= 49:
-        return "40 - 49"
-    elif 50 <= age <= 59:
-        return "50 - 59"
-    elif 60 <= age <= 69:
-        return "60 - 69"
-    elif 70 <= age <= 79:
-        return "70 - 79"
-    elif 80 <= age <= 89:
-        return "80 - 89"
-    elif 90 <= age <= 99:
-        return "90 - 99"
-    elif age >= 100:
-        return "100+"
-    
-def get_most_popular(table_name, date_range_query, popular_type, state=None,filter_query=None):
-    item_list = []
-    count_list = []
-
-    if filter_query is not None:
-        with ENGINE.connect() as connection:
-            if popular_type == 'hour':
-                query = text(f"""
-                    SELECT substr(hour, 1, 2) as hour_part, COUNT(*) as count
-                    FROM {table_name}
-                    WHERE ({date_range_query} AND {filter_query})
-                    GROUP BY hour_part
-                    ORDER BY count DESC
-                    LIMIT 10
-                """)
-                result = connection.execute(query)
-
-                for row in result:
-                    item_list.append(convert_to_user_friendly_time(row[0]))
-                    count_list.append(row[1])
-
-            elif popular_type == 'state':
-                query = text(f"""
-                    SELECT {popular_type} as item, COUNT(*) as count
-                    FROM {table_name}
-                    WHERE ({date_range_query} AND {filter_query})
-                    GROUP BY {popular_type}
-                    ORDER BY count DESC
-                    """)
-
-                result = connection.execute(query)
-
-                for row in result:
-                    item_list.append(row[0])
-                    count_list.append(row[1])
-            elif popular_type == 'city':
-                query = text(f"""
-                    SELECT {popular_type} as item, COUNT(*) as count
-                    FROM {table_name}
-                    WHERE ({date_range_query} AND {filter_query} AND state = '{state}')
-                    GROUP BY {popular_type}
-                    ORDER BY count DESC
-                    """)
-
-                result = connection.execute(query)
-
-                for row in result:
-                    item_list.append(row[0])
-                    count_list.append(row[1])
-            else:
-                query = text(f"""
-                    SELECT {popular_type} as item, COUNT(*) as count
-                    FROM {table_name}
-                    WHERE ({date_range_query} AND {filter_query})
-                    GROUP BY {popular_type}
-                    ORDER BY count DESC
-                    LIMIT 10
-                """)
-
-                result = connection.execute(query)
-
-                total = 0
-                count_list_new = []
-                if popular_type == 'income_levels':
-                    for row in result:
-                        if row[0] == '-' or 'Unknown' in row[0]:
-                            pass
-                        else:
-                            numbers = re.findall(r'\d+', row[0])
-                            print(numbers)
-                            if '150' in numbers and len(numbers) == 1:
-                                item_list.append('Greater Then 150K')
-                            elif '30' in numbers and len(numbers) == 1:
-                                item_list.append('Less Then 30K')
-                            elif len(numbers) == 2:
-                                item_list.append(f'{numbers[0]}K-{numbers[1]}K')
-                            total += int(row[1])
-                            count_list_new.append(row[1])
-                    for count in count_list_new:
-                        count_list.append(calculate_percentage(count,total))
-                else:
-                    for row in result:
-                        item_list.append(row[0])
-                        count_list.append(row[1])
-    else:
-         with ENGINE.connect() as connection:
-            if popular_type == 'hour':
-                query = text(f"""
-                    SELECT substr(hour, 1, 2) as hour_part, COUNT(*) as count
-                    FROM {table_name}
-                    WHERE {date_range_query}
-                    GROUP BY hour_part
-                    ORDER BY count DESC
-                    LIMIT 10
-                """)
-                result = connection.execute(query)
-
-                for row in result:
-                    item_list.append(convert_to_user_friendly_time(row[0]))
-                    count_list.append(row[1])
-
-            elif popular_type == 'state':
-                query = text(f"""
-                    SELECT {popular_type} as item, COUNT(*) as count
-                    FROM {table_name}
-                    WHERE {date_range_query}
-                    GROUP BY {popular_type}
-                    ORDER BY count DESC
-                    """)
-
-                result = connection.execute(query)
-
-                for row in result:
-                    item_list.append(row[0])
-                    count_list.append(row[1])
-            elif popular_type == 'city':
-                query = text(f"""
-                    SELECT {popular_type} as item, COUNT(*) as count
-                    FROM {table_name}
-                    WHERE ({date_range_query} AND state = '{state}')
-                    GROUP BY {popular_type}
-                    ORDER BY count DESC
-                    """)
-
-                result = connection.execute(query)
-
-                for row in result:
-                    item_list.append(row[0])
-                    count_list.append(row[1])
-            else:
-                query = text(f"""
-                    SELECT {popular_type} as item, COUNT(*) as count
-                    FROM {table_name}
-                    WHERE {date_range_query}
-                    GROUP BY {popular_type}
-                    ORDER BY count DESC
-                    LIMIT 10
-                """)
-
-                result = connection.execute(query)
-
-                total = 0
-                count_list_new = []
-                if popular_type == 'income_levels':
-                    for row in result:
-                        if row[0] == '-' or 'Unknown' in row[0]:
-                            pass
-                        else:
-                            numbers = re.findall(r'\d+', row[0])
-                            print(numbers)
-                            if '150' in numbers and len(numbers) == 1:
-                                item_list.append('Greater Then 150K')
-                            elif '30' in numbers and len(numbers) == 1:
-                                item_list.append('Less Then 30K')
-                            elif len(numbers) == 2:
-                                item_list.append(f'{numbers[0]}K-{numbers[1]}K')
-                            total += int(row[1])
-                            count_list_new.append(row[1])
-                    for count in count_list_new:
-                        count_list.append(calculate_percentage(count,total))
-                else:
-                    for row in result:
-                        item_list.append(row[0])
-                        count_list.append(row[1])
-
-
-    return item_list, count_list
-
-def get_by_precent_count(table_name, field, date_range_query,filter_query=None):
-    item_list = []
-    count_list = []
-
-    if filter_query is not None:
-        with ENGINE.connect() as connection:
-            if field == 'age':
-                query = text(f"""
-                    SELECT
-                        CASE
-                            WHEN age = '-' THEN 'Unknown'
-                            WHEN age::float < 10 THEN '0-10'
-                            WHEN age::float < 20 THEN '10-20'
-                            WHEN age::float < 30 THEN '20-30'
-                            WHEN age::float < 40 THEN '30-40'
-                            WHEN age::float < 50 THEN '40-50'
-                            WHEN age::float < 60 THEN '50-60'
-                            WHEN age::float < 70 THEN '60-70'
-                            WHEN age::float < 80 THEN '70-80'
-                            WHEN age::float < 90 THEN '80-90'
-                            ELSE 'Unknown'
-                        END AS age_range,
-                        COUNT(DISTINCT full_name) AS count 
-                    FROM
-                        {table_name}
-                    WHERE ({date_range_query} AND {filter_query}) -- Replace with your actual date range condition
-                    GROUP BY
-                        age_range
-                    ORDER BY
-                        count DESC
-                    LIMIT 10;
-
-                """)
-            else:
-                query = text(f"""
-                    SELECT {field} as item, COUNT(DISTINCT full_name) AS count 
-                    FROM {table_name}
-                    WHERE ({date_range_query} AND {filter_query})
-                    GROUP BY {field}
-                    ORDER BY count DESC
-                    LIMIT 10
-                """)
-
-            result = connection.execute(query)
-
-            for row in result:
-                if row[0] == '-' or 'Unknown' in row[0]:
-                    pass
-                else:
-                    if field == 'credit_range':
-                        numbers = re.findall(r'\d+', row[0])
-                        output_string = '-'.join(numbers)
-                        item_list.append(output_string)
-                        count_list.append(row[1])
-                    else:
-                        item_list.append(row[0])
-                        count_list.append(row[1])
-    else:
-        with ENGINE.connect() as connection:
-            if field == 'age':
-                query = text(f"""
-                    SELECT
-                        CASE
-                            WHEN age = '-' THEN 'Unknown'
-                            WHEN age::float < 10 THEN '0-10'
-                            WHEN age::float < 20 THEN '10-20'
-                            WHEN age::float < 30 THEN '20-30'
-                            WHEN age::float < 40 THEN '30-40'
-                            WHEN age::float < 50 THEN '40-50'
-                            WHEN age::float < 60 THEN '50-60'
-                            WHEN age::float < 70 THEN '60-70'
-                            WHEN age::float < 80 THEN '70-80'
-                            WHEN age::float < 90 THEN '80-90'
-                            ELSE 'Unknown'
-                        END AS age_range,
-                        COUNT(DISTINCT full_name) AS count 
-                    FROM
-                        {table_name}
-                    WHERE
-                        {date_range_query} -- Replace with your actual date range condition
-                    GROUP BY
-                        age_range
-                    ORDER BY
-                        count DESC
-                    LIMIT 10;
-                """)
-            else:
-                query = text(f"""
-                    SELECT {field} as item, COUNT(DISTINCT full_name) as count 
-                    FROM {table_name}
-                    WHERE {date_range_query}
-                    GROUP BY {field}
-                    ORDER BY count DESC
-                    LIMIT 10;
-                """)
-
-            result = connection.execute(query)
-
-            for row in result:
-                if row[0] == '-' or 'Unknown' in row[0]:
-                    pass
-                else:
-                    if field == 'credit_range':
-                        numbers = re.findall(r'\d+', row[0])
-                        output_string = '-'.join(numbers)
-                        item_list.append(output_string)
-                        count_list.append(row[1])
-                    else:
-                        item_list.append(row[0])
-                        count_list.append(row[1])
-    return item_list, count_list
-
-
-def get_counts(table_name, date_range_query, filter_query=None):
-    with ENGINE.connect() as connection:
-        if filter_query is not None:
-            query = text(f"""
-                SELECT COUNT(DISTINCT "full_name") as total_distinct_count
-                FROM {table_name}
-                WHERE ({date_range_query} AND {filter_query})
-            """)
-            result = connection.execute(query).fetchall()
-            journey_count = connection.execute(text(f"SELECT COUNT(*) FROM {table_name} WHERE {date_range_query}")).scalar()
-            try:
-                people_count = result[0][0]  # Assuming "full_name" is the first column in the SELECT statement
-            except IndexError:
-                people_count = 0
-        else:
-            query_people = text(f"""
-                SELECT COUNT(DISTINCT "full_name") as total_distinct_count
-                FROM {table_name}
-                WHERE {date_range_query}
-            """)
-            query_journey = text(f"""
-                SELECT COUNT(*) as count
-                FROM {table_name}
-                WHERE {date_range_query}
-            """)
-
-            result_people = connection.execute(query_people).fetchall()
-            result_journey = connection.execute(query_journey).fetchall()
-            try:
-                people_count = result_people[0][0]  # Assuming "fullName" is the first column in the SELECT statement
-                journey_count = result_journey[0][0]  # Assuming "count" is the first column in the SELECT statement
-            except IndexError:
-                people_count = 0
-                journey_count = 0
-
-    return journey_count, people_count
-
-def get_df_date_query(df, start_date, end_date, search=None):
-    # Assume df is your Pandas DataFrame containing the 'date' column
-    if start_date in ['undefined', None]:
-        start_datetime_to_obj = datetime.today()
-        start_datetime = start_datetime_to_obj.strftime('%Y-%m-%d')
-        end_datetime_to_obj = datetime.strptime(f'{datetime.now().year}-01-01', '%Y-%m-%d')
-        end_datetime = end_datetime_to_obj.strftime('%Y-%m-%d')
-
-        # Create a boolean mask for date range query
-        date_range_mask = (df['date'] >= end_datetime) & (df['date'] <= start_datetime)
-    else:
-        # Parse the start_date and end_date as datetime objects
-        start_datetime_to_obj = datetime.strptime(start_date, '%Y-%m-%d')
-        start_datetime = start_datetime_to_obj.strftime('%Y-%m-%d')
-        end_datetime_to_obj = datetime.strptime(end_date, '%Y-%m-%d')
-        end_datetime = end_datetime_to_obj.strftime('%Y-%m-%d')
-
-        # Create a boolean mask for date range query
-        date_range_mask = (df['date'] >= start_datetime) & (df['date'] <= end_datetime)
-
-    # Apply the mask to filter rows in the DataFrame
-    filtered_df = df.loc[date_range_mask]
-
-    return filtered_df
-
-
-
-def get_date_query(start_date = None, end_date = None, search=None):
-    if any([start_date == 'undefined', start_date is None]):
-        start_datetime = datetime(datetime.now().year, 1, 1)
-        end_datetime = datetime.today()
-    else:
-        # Parse the start_date and end_date as datetime objects
-        start_datetime = datetime.strptime(start_date, '%Y-%m-%d')
-        end_datetime = datetime.strptime(end_date, '%Y-%m-%d')
-
-    # Format the datetime objects as strings
-    start_date_str = start_datetime.strftime('%Y-%m-%d')
-    end_date_str = end_datetime.strftime('%Y-%m-%d')
-
-
-    # Create a query to find documents within the specified date range
-    date_range_query = text(f"""
-        CAST(date AS DATE) >= '{start_date_str}' AND CAST(date AS DATE) <= '{end_date_str}'
-    """)
-
-    return date_range_query
-
-def build_df_filter(df,filter_params=None, column_filters=None):
-    filters = []
-
-    if filter_params:
-        for filter in filter_params:
-            filter_key = filter["id"]
-            filter_value = filter["value"]
-            if filter_key == 'range':
-                column_name = filter_value['name']
-                min_val = int(filter_value['minVal'])
-                max_val = int(filter_value['maxVal'])
-
-                filters.append(
-                    (column_name, '>=', min_val) & (column_name, '<=', max_val))
-            elif filter_key == 'contains':
-                or_arr = []
-                for include in filter_value['include_array']:
-                    try:
-                        column_name = 'url'
-                        include_value = include['value']
-                        include_type = include['type']
-                        if include_type == 'contain':
-                            or_arr.append(df[column_name].str.contains(include_value, case=False, regex=True))
-                        elif include_type == 'start':
-                            or_arr.append(df[column_name].str.startswith(include_value))
-                        elif include_type == 'end':
-                            or_arr.append(df[column_name].str.endswith(include_value))
-                        elif include_type == 'exact':
-                            or_arr.append(df[column_name] == include_value)
-                        elif include_type == 'notequal':
-                            or_arr.append(~df[column_name].str.contains(fr"\{include_value}$", case=False, regex=True))
-                    except KeyError:
-                        pass
-
-                if len(or_arr) > 0:
-                    filters.append(pd.concat(or_arr, axis=1).any(axis=1))
-
-            elif filter_key == 'checkbox':
-                column_name = filter_value['name']
-                value_arr = filter_value['value']
-                or_arr = []
-
-                for value in value_arr:
-                    or_arr.append(df[column_name].str.contains(re.escape(value), case=False, regex=True))
-
-                if len(or_arr) > 0:
-                    filters.append(pd.concat(or_arr, axis=1).any(axis=1))
-            else:
-                filters.append(df[filter_key].str.contains(filter_value, case=False, regex=True))
-
-    if column_filters:
-        for filter in column_filters:
-            filter_key = filter["id"]
-            filter_value = filter["value"]
-            filters.append(df[filter_key].str.contains(filter_value, case=False, regex=True))
-
-    # Combine filters using '&' for multiple filters
-    if filters:
-        return pd.concat(filters, axis=1).all(axis=1)
-    else:
-        return pd.Series(True, index=df.index)  # No filters
-    
-
-def build_filter(company_id,filter_params=None, column_filters=None):
-    filters = []
-    exclude_array = []
-
-    if filter_params:
-        for filter in filter_params:
-            filter_key = filter["id"]
-            filter_value = filter["value"]
-
-            if filter_key == 'range':
-                column_name = filter_value['name']
-                min_val = int(filter_value['minVal'])
-                max_val = int(filter_value['maxVal'])
-
-                filters.append(
-                    text(f"{column_name} >= '{min_val}' AND {column_name} <= '{max_val}'")
-                )
-            elif filter_key == 'contains':
-                or_arr = []
-                for include in filter_value['include_array']:
-                    try:
-                        column_name = 'url'
-                        include_value = include['value']
-                        include_type = include['type']
-
-                        if include_type == 'contain':
-                            or_arr.append(
-                                text(f"{column_name} ILIKE '%{include_value}%'")
-                            )
-                        elif include_type == 'start':
-                            or_arr.append(
-                                text(f"{column_name} ILIKE '{include_value}%'")
-                            )
-                        elif include_type == 'end':
-                            or_arr.append(
-                                text(f"{column_name} ILIKE '%{include_value}'")
-                            )
-                        elif include_type == 'exact':
-                            or_arr.append(
-                                text(f"{column_name} = '{include_value}'")
-                            )
-                        elif include_type == 'notequal':
-                            or_arr.append(
-                                text(f"{column_name} NOT ILIKE :include_value").bindparams(include_value=f'%{include_value}%')
-                            )
-                    except KeyError:
-                        pass
-
-                if or_arr:
-                    filters.append(f"({text(' OR '.join([str(expr) for expr in or_arr]))})")
-                
-                or_arr = []
-                for exclude in filter_value['exclude_array']:
-                    try:
-                        column_name = 'url'
-                        exclude_value = exclude['value']
-                        exclude_type = exclude['type']
-
-                        if exclude_type == 'contain':
-                            exclude_array.append(
-                                text(f"{column_name} ILIKE '%{exclude_value}%'")
-                            )
-                        elif exclude_type == 'start':
-                            exclude_array.append(
-                                text(f"{column_name} ILIKE '{exclude_value}%'")
-                            )
-                        elif exclude_type == 'end':
-                            exclude_array.append(
-                                text(f"{column_name} ILIKE '%{exclude_value}'")
-                            )
-                        elif exclude_type == 'exact':
-                            exclude_array.append(
-                                text(f"{column_name} = '{exclude_value}'")
-                            )
-                    except KeyError:
-                        pass
-
-            elif filter_key == 'checkbox':
-                column_name = filter_value['name']
-                value_arr = filter_value['value']
-                or_arr = []
-
-                for value in value_arr:
-                    or_arr.append(text(f"{column_name} = '{value}'"))
-
-                if or_arr:
-                    filters.append(text(' OR '.join([str(expr) for expr in or_arr])))
-            else:
-                filters.append(
-                    text(f"{filter_key} ILIKE '%{filter_value}%")
-                )
-
-    if column_filters:
-        for filter in column_filters:
-            filter_key = filter["id"]
-            filter_value = filter["value"]
-            filters.append(
-                text(f"{filter_key} ILIKE '%{filter_value}%'")
-            )
-
-    # Combine filters using 'AND' for multiple filters
-    if filters:
-        if len(exclude_array) > 0:
-            return text(f"""
-            {' AND '.join([str(expr) for expr in filters])}
-            AND
-            full_name NOT IN (SELECT full_name FROM public.{company_id} WHERE {' OR '.join([str(expr) for expr in exclude_array])}
-            )
-            """)
-        else:
-            return text(' AND '.join([str(expr) for expr in filters]))
-    else:
-        return None  # No filters
-    
-
-
-
-def update_company_counts(company_id,segment_id=None,filter_query=None):
-        if segment_id:
-            try:
-                with ENGINE.connect() as connection:
-                    journey_count = connection.execute(text(f"SELECT COUNT(*) FROM {company_id} WHERE {filter_query}")).scalar()
-                    people_count = connection.execute(text(f"SELECT COUNT(DISTINCT full_name) as count FROM {company_id} WHERE {filter_query}")).scalar()
-
-            except IndexError:
-                people_count = 0
-                journey_count = 0
-
-            SEGMENT_COLLECTION.update_one({'_id': segment_id}, {'$set' : {'counts' : {
-                "people_count" : people_count,
-                "journey_count" : journey_count
-            }}})
-        else:
-            try:
-                with ENGINE.connect() as connection:
-                    journey_count = connection.execute(text(f"SELECT COUNT(*) FROM {company_id}")).scalar()
-                    people_count = connection.execute(text(f"SELECT COUNT(DISTINCT full_name) as count FROM {company_id}")).scalar()
-
-            except IndexError:
-                people_count = 0
-                journey_count = 0
-
-            COMPANIES_COLLECTION.update_one({'_id': company_id}, {'$set' : {'counts' : {
-                "people_count" : people_count,
-                "journey_count" : journey_count
-            }}})
-        
-
-def update_popular_chart(company_id, segment_id=None, filter_query=None):
-    popular_chart = {}
-    popular_types = ['hour', 'url','state','income_levels']
-
-    if segment_id:
-        with ENGINE.connect() as connection:
-            for popular_type in popular_types:
-                item_list = []
-                count_list = []
-
-                if popular_type == 'hour':
-                    query = text(f"""
-                    SELECT substr(hour, 1, 2) as hour_part, COUNT(*) as count
-                    FROM {company_id}
-                    WHERE {filter_query}
-                    GROUP BY hour_part
-                    ORDER BY count DESC
-                    LIMIT 10
-                    """)
-
-                    result = connection.execute(query).fetchall()
-
-                    for item in result:
-                        item_list.append(convert_to_user_friendly_time(item[0]))
-                        count_list.append(item[1])
-
-                elif popular_type == 'state':
-                    query = text(f"""
-                        SELECT {popular_type} as item, COUNT(*) as count
-                        FROM {company_id}
-                        WHERE {filter_query}
-                        GROUP BY {popular_type}
-                        ORDER BY count DESC
-                        """)
-
-                    result = connection.execute(query)
-
-                    for row in result:
-                        item_list.append(row[0])
-                        count_list.append(row[1])
-
-                elif popular_type == 'url':
-                    query = text(f"""
-                        SELECT url,
-                                COUNT(*) AS count
-                        FROM {company_id}
-                        WHERE {filter_query}
-                        GROUP BY url
-                        ORDER BY count DESC
-                        LIMIT 10
-                    """)
-
-                    result = connection.execute(query).fetchall()
-
-                    for item in result:
-                        item_list.append(item[0])
-                        count_list.append(item[1])
-
-
-                elif popular_type == 'income_levels':
-                    total = 0
-                    count_list_new = []
-                    query = text(f"""
-                        SELECT {popular_type} as item, COUNT(*) as count
-                        FROM {company_id}
-                        WHERE {filter_query}
-                        GROUP BY {popular_type}
-                        ORDER BY count DESC
-                        LIMIT 10
-                        """)
-
-                    result = connection.execute(query).fetchall()
-                    for row in result:
-                        if row[0] == '-' or 'Unknown' in row[0]:
-                            pass
-                        else:
-                            numbers = re.findall(r'\d+', row[0])
-                            print(numbers)
-                            if '150' in numbers and len(numbers) == 1:
-                                item_list.append('Greater Then 150K')
-                            elif '30' in numbers and len(numbers) == 1:
-                                item_list.append('Less Then 30K')
-                            elif len(numbers) == 2:
-                                item_list.append(f'{numbers[0]}K-{numbers[1]}K')
-                            total += int(row[1])
-                            count_list_new.append(row[1])
-                    for count in count_list_new:
-                        count_list.append(calculate_percentage(count,total))
-                else:
-                    for row in result:
-                        item_list.append(row[0])
-                        count_list.append(row[1])
-
-                popular_chart[popular_type] = {
-                    'item_list': item_list,
-                    'count_list': count_list
-                }
-
-        SEGMENT_COLLECTION.update_one({'_id': segment_id}, {'$set': {'popular_chart': popular_chart}})
-    else:
-        with ENGINE.connect() as connection:
-            for popular_type in popular_types:
-                item_list = []
-                count_list = []
-
-                if popular_type == 'hour':
-                    query = text(f"""
-                    SELECT substr(hour, 1, 2) as hour_part, COUNT(*) as count
-                    FROM {company_id}
-                    GROUP BY hour_part
-                    ORDER BY count DESC
-                    LIMIT 10
-                """)
-
-                    result = connection.execute(query).fetchall()
-
-                    for item in result:
-                        print(item)
-                        item_list.append(convert_to_user_friendly_time(item[0]))
-                        count_list.append(item[1])
-                
-                elif popular_type == 'state':
-                    query = text(f"""
-                        SELECT {popular_type} as item, COUNT(*) as count
-                        FROM {company_id}
-                        GROUP BY {popular_type}
-                        ORDER BY count DESC
-                        """)
-
-                    result = connection.execute(query)
-
-                    for row in result:
-                        item_list.append(row[0])
-                        count_list.append(row[1])
-
-                elif popular_type == 'url':
-                    query = text(f"""
-                        SELECT url,
-                                COUNT(*) AS count
-                        FROM {company_id}
-                        GROUP BY url
-                        ORDER BY count DESC
-                        LIMIT 10
-                    """)
-
-                    result = connection.execute(query).fetchall()
-
-                    for item in result:
-                        item_list.append(item[0])
-                        count_list.append(item[1])
-
-                elif popular_type == 'income_levels':
-                    total = 0
-                    count_list_new = []
-                    query = text(f"""
-                        SELECT {popular_type} as item, COUNT(*) as count
-                        FROM {company_id}
-                        GROUP BY {popular_type}
-                        ORDER BY count DESC
-                        LIMIT 10
-                        """)
-
-                    result = connection.execute(query).fetchall()
-                    for row in result:
-                        if row[0] == '-' or 'Unknown' in row[0]:
-                            pass
-                        else:
-                            numbers = re.findall(r'\d+', row[0])
-                            print(numbers)
-                            if '150' in numbers and len(numbers) == 1:
-                                item_list.append('Greater Then 150K')
-                            elif '30' in numbers and len(numbers) == 1:
-                                item_list.append('Less Then 30K')
-                            elif len(numbers) == 2:
-                                item_list.append(f'{numbers[0]}K-{numbers[1]}K')
-                            total += int(row[1])
-                            count_list_new.append(row[1])
-                    for count in count_list_new:
-                        count_list.append(calculate_percentage(count,total))
-                else:
-                    for row in result:
-                        item_list.append(row[0])
-                        count_list.append(row[1])
-
-                popular_chart[popular_type] = {
-                    'item_list': item_list,
-                    'count_list': count_list
-                }
-        COMPANIES_COLLECTION.update_one({'_id': company_id}, {'$set': {'popular_chart': popular_chart}})
-
-def update_by_percent(company_id, segment_id=None, filter_query=None):
-    by_percent_chart = {}
-    fields = ['age', 'gender']
-
-    if segment_id:
-        with ENGINE.connect() as connection:
-            for field in fields:
-                item_list = []
-                count_list = []
-                
-                if field == 'age':
-                    query = text(f"""
-                        SELECT
-                        CASE
-                            WHEN age = '-' THEN 'Unknown'
-                            WHEN age::float < 10 THEN '0-10'
-                            WHEN age::float < 20 THEN '10-20'
-                            WHEN age::float < 30 THEN '20-30'
-                            WHEN age::float < 40 THEN '30-40'
-                            WHEN age::float < 50 THEN '40-50'
-                            WHEN age::float < 60 THEN '50-60'
-                            WHEN age::float < 70 THEN '60-70'
-                            WHEN age::float < 80 THEN '70-80'
-                            WHEN age::float < 90 THEN '80-90'
-                            ELSE 'Unknown'
-                        END AS age_range,
-                        COUNT(DISTINCT full_name) AS count 
-                    FROM
-                        {company_id}
-                    WHERE 
-                        {filter_query}
-                    GROUP BY
-                        age_range
-                    ORDER BY
-                        count DESC
-                    LIMIT 10;
-                        """)
-                else:
-                    query = text(f"""
-                        SELECT {field},
-                                COUNT(DISTINCT full_name) AS count 
-                        FROM {company_id}
-                        WHERE {filter_query}
-                        GROUP BY {field}
-                        ORDER BY count DESC
-                        LIMIT 10
-                    """)
-
-                result = connection.execute(query)
-
-                for row in result:
-                    if row[0] == '-' or 'Unknown' in row[0]:
-                        pass
-                    else:
-                        if field == 'credit_range':
-                            numbers = re.findall(r'\d+', row[0])
-                            output_string = '-'.join(numbers)
-                            item_list.append(output_string)
-                            count_list.append(row[1])
-                        else:
-                            item_list.append(row[0])
-                            count_list.append(row[1])
-
-                    by_percent_chart[field] = {
-                        'item_list': item_list,
-                        'count_list': count_list
-                    }
-
-        SEGMENT_COLLECTION.update_one({'_id': segment_id}, {'$set': {'by_percent_chart': by_percent_chart}})
-    else:
-        with ENGINE.connect() as connection:
-            for field in fields:
-                item_list = []
-                count_list = []
-                
-                if field == 'age':
-                    query = text(f"""
-                        SELECT
-                        CASE
-                            WHEN age = '-' THEN 'Unknown'
-                            WHEN age::float < 10 THEN '0-10'
-                            WHEN age::float < 20 THEN '10-20'
-                            WHEN age::float < 30 THEN '20-30'
-                            WHEN age::float < 40 THEN '30-40'
-                            WHEN age::float < 50 THEN '40-50'
-                            WHEN age::float < 60 THEN '50-60'
-                            WHEN age::float < 70 THEN '60-70'
-                            WHEN age::float < 80 THEN '70-80'
-                            WHEN age::float < 90 THEN '80-90'
-                            ELSE 'Unknown'
-                        END AS age_range,
-                        COUNT(DISTINCT full_name) AS count 
-                    FROM
-                        {company_id}
-                    GROUP BY
-                        age_range
-                    ORDER BY
-                        count DESC
-                    LIMIT 10;
-                        """)
-                else:
-                    query = text(f"""
-                        SELECT {field},
-                                COUNT(DISTINCT full_name) AS count 
-                        FROM {company_id}
-                        GROUP BY {field}
-                        ORDER BY count DESC
-                        LIMIT 10
-                    """)
-
-                result = connection.execute(query)
-
-                for row in result:
-                    print(row)
-                    if row[0] == '-' or 'Unknown' in row[0]:
-                        pass
-                    else:
-                        if field == 'credit_range':
-                            numbers = re.findall(r'\d+', row[0])
-                            output_string = '-'.join(numbers)
-                            item_list.append(output_string)
-                            count_list.append(row[1])
-                        else:
-                            item_list.append(row[0])
-                            count_list.append(row[1])
-
-                    by_percent_chart[field] = {
-                        'item_list': item_list,
-                        'count_list': count_list
-                    }
-
-        COMPANIES_COLLECTION.update_one({'_id': company_id}, {'$set': {'by_percent_chart': by_percent_chart}})
-
-
-
-def update_integration(company_id,api_key,integration_name,client_secret=None,public_id=None,site_id=None,list_id=None,filter_query=None):
-    # Build and execute the SQL query to select a random row
-    if filter_query:
-        query = text(f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE (CAST(date_added AS DATE) = CURRENT_DATE AND {filter_query}) LIMIT 10;")
-    else:
-        query = text(f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE CAST(date_added AS DATE) = CURRENT_DATE LIMIT 10;")
-
-
-    with ENGINE.connect() as connection:
-        result = connection.execute(query)
-        column_names = result.keys()
-    data = [dict(zip(column_names, row)) for row in result]
-
-    for row in data:
-        if integration_name == 'Klaviyo':
-            klayviyo_integration(api_key,row) 
-        elif integration_name == 'BayEngage':
-            bayengage_integration(client_secret,public_id,row,list_id)
-        elif integration_name == 'Customer.io':
-            customerIO_integration(site_id,api_key,row) 
-        elif integration_name == 'Mailchimp':
-            mailchimp_integration(api_key,list_id,row) 
-        elif integration_name == 'SendGrid':
-            sendgrid_integration(api_key,row,[list_id]) 
-        elif integration_name == 'HubSpot':
-            hubspot_integration(api_key,row) 
-        elif integration_name == 'EmailOctopus':
-            emailoctopus_integration(api_key,list_id,row) 
-        elif integration_name == 'OmniSend':
-            omnisend_integration(api_key,row) 
-
-
-# @app.route("/api/auth/google", methods=['POST'])
-# def auth_google():
-#     code = request.json.get('code')
-#     client_id = '852749625849-0711o5c0mn6elckm3cqllf546am5u58d.apps.googleusercontent.com'
-#     client_secret = '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'
-#     redirect_uri = 'http://localhost:3000'
-#     grant_type = 'authorization_code'
-
-#     token_url = 'https://oauth2.googleapis.com/token'
-#     headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-#     data = {
-#         'code': code,
-#         'client_id': client_id,
-#         'client_secret': client_secret,
-#         'redirect_uri': redirect_uri,
-#         'grant_type': grant_type,
-#     }
-
-#     try:
-#         response = requests.post(token_url, headers=headers, data=data)
-#         response.raise_for_status()
-#         tokens = response.json()
-
-
-#         credentials = {
-#                 "developer_token": "A37QyGuX6bLSUzyCMrfvbA",
-#                 "refresh_token": tokens['refresh_token'],
-#                 "client_id": client_id,
-#                 "client_secret": client_secret,
-#                 "use_proto_plus": False}
-
-#         print(credentials)
-#         client = GoogleAdsClient.load_from_dict(credentials)
-#         # Send the tokens back to the frontend, or store them securely and create a session
-
-#         create_customer_match_user_list(client, '2315440060')
-#         return jsonify(tokens)
-#     except requests.exceptions.RequestException as e:
-#         # Handle errors in the token exchange
-#         print('Token exchange error:', e)
-#         return jsonify({'error': 'Internal Server Error'})
-    
-    
 @app.route("/api/test", methods=['GET'])
 def tes():
-    create_df_file_from_db('xs249')
+    create_df_file_from_db(
+        AZURE_ACCOUNT_URL,
+        AZURE_CONNECTION_BLOB_STRING,
+        USERS_FILE_COLUMNS_ORDER,
+        JOURNEY_FILE_COLUMNS_ORDER,
+        ENGINE,
+        AZURE_CONTAINER_NAME,
+        'xs249'
+    )
 
     return jsonify('done!')
 
@@ -1316,34 +92,58 @@ def data_changed():
     data = request.get_json()
     company_id = data.get('company_id')
 
-    create_df_file_from_db(company_id)
-    update_company_counts(company_id)
-    update_popular_chart(company_id)
-    update_by_percent(company_id)
+    create_df_file_from_db(
+        AZURE_ACCOUNT_URL,
+        AZURE_CONNECTION_BLOB_STRING,
+        USERS_FILE_COLUMNS_ORDER,
+        JOURNEY_FILE_COLUMNS_ORDER,
+        ENGINE,
+        AZURE_CONTAINER_NAME,
+        company_id
+    )
+    update_company_counts(ENGINE, company_id,
+                          COMPANIES_COLLECTION=COMPANIES_COLLECTION)
+    update_popular_chart(ENGINE, company_id,
+                         COMPANIES_COLLECTION=COMPANIES_COLLECTION)
+    update_by_percent(ENGINE, company_id,
+                      COMPANIES_COLLECTION=COMPANIES_COLLECTION)
 
-    segments = SEGMENT_COLLECTION.find({'attached_company'  : company_id})
+    segments = SEGMENT_COLLECTION.find({'attached_company': company_id})
     for segment in segments:
-        filter_query = build_filter(company_id,segment['filters'])
-        create_df_file_from_db(company_id,segment["_id"],segment['filters'])
-        update_company_counts(company_id,segment['_id'],filter_query)
-        update_popular_chart(company_id,segment['_id'],filter_query)
-        update_by_percent(company_id,segment['_id'],filter_query)
+        filter_query = build_filter(company_id, segment['filters'])
+        create_df_file_from_db(
+            AZURE_ACCOUNT_URL,
+            AZURE_CONNECTION_BLOB_STRING,
+            USERS_FILE_COLUMNS_ORDER,
+            JOURNEY_FILE_COLUMNS_ORDER,
+            ENGINE,
+            AZURE_CONTAINER_NAME,
+            company_id,
+            segment["_id"],
+            segment['filters']
+        )
+        update_company_counts(ENGINE, company_id, SEGMENT_COLLECTION=SEGMENT_COLLECTION,
+                              segment_id=segment['_id'], filter_query=filter_query)
+        update_popular_chart(ENGINE, company_id, SEGMENT_COLLECTION=SEGMENT_COLLECTION,
+                             segment_id=segment['_id'], filter_query=filter_query)
+        update_by_percent(ENGINE, company_id, SEGMENT_COLLECTION=SEGMENT_COLLECTION,
+                          segment_id=segment['_id'], filter_query=filter_query)
     for user in USER_COLLECTION.find({'companies': company_id}):
-       print(user)
-       print(user["integrations"])
-       if user["integrations"]:
-           for integration in user["integrations"]:
-               update_integration(
-                company_id,
-                integration["api_key"],
-                integration["integration_name"],
-                integration["site_id"],
-                integration["list_id"],
-                integration["client_secret"],
-                integration["public_id"]
+        if user["integrations"]:
+            for integration in user["integrations"]:
+                update_integration(
+                    ENGINE,
+                    company_id,
+                    integration["api_key"],
+                    integration["integration_name"],
+                    integration["site_id"],
+                    integration["list_id"],
+                    integration["client_secret"],
+                    integration["public_id"]
                 )
 
     return jsonify('done!')
+
 
 @app.route("/api/login", methods=['POST'])
 def login():
@@ -1354,7 +154,7 @@ def login():
     user = USER_COLLECTION.find_one({'user_email': email})
 
     if user and bcrypt.check_password_hash(user['user_password'], password):
-        token = generate_jwt_token(user["_id"], user["user_role"])
+        token = generate_jwt_token(user["_id"], user["user_role"], SECRET_KEY)
         # Password is correct
         # You can generate a token here and exclude it in the response for future authenticated requests
         response = {
@@ -1399,7 +199,7 @@ def register():
         'user_password': hashed_password,
         'user_role': user_role,
         'companies': companies_list,
-        'integrations' : []
+        'integrations': []
     }
 
     USER_COLLECTION.insert_one(new_user)
@@ -1434,36 +234,17 @@ def add_company():
     }
 
     USER_COLLECTION.update_many({"user_role": "admin"}, {
-                                "$push": {"companies": company_id}})
+                                "$push": {"companies": company_id.lower()}})
     COMPANIES_COLLECTION.insert_one(new_company)
 
-    create_postgres_table(company_id.lower())
+    create_postgres_table(company_id.lower(), COLUMNS_ORDER, ENGINE)
 
-
-    update_company_counts(company_id)
-    update_popular_chart(company_id)
-    update_by_percent(company_id)
+    update_company_counts(company_id.lower())
+    update_popular_chart(company_id.lower())
+    update_by_percent(company_id.lower())
 
     return jsonify({'message': 'Registration successful'}), 201  # Created
 
-
-@app.route("/api/add-data", methods=['POST'])
-def add_data():
-    company_id = request.args.get('id')
-    company_collection = DB_CLIENT[f'{company_id}_data']
-
-    df = pd.read_csv(
-        '/Users/neevassouline/Desktop/Coding Projects/IcewebIO/backend/people_data_20.csv')
-    df.fillna('-', inplace=True)
-
-    df[['date', 'hour']] = df['date'].str.split(' ', expand=True)
-    df[['hour']] = df['hour'].str.split('+', expand=True)[[0]]
-    df['full_name'] = df['firstName'] + ' ' + df['lastName']
-
-    list_of_lists = df.to_dict(orient='records')
-    company_collection.insert_many(list_of_lists)
-
-    return jsonify('Done!')
 
 
 @app.route("/api/add-integration", methods=['POST'])
@@ -1482,7 +263,7 @@ def add_integration():
         public_id = data.get('public_id')
         filters = data.get('filters')
         segment_id = data.get('segment_id')
-        
+
         print(client_secret)
         print(public_id)
 
@@ -1495,25 +276,26 @@ def add_integration():
             "integration_name": integration_name,
             "attached_company": company_id,
             "api_key": api_key,
-            "site_id":site_id,
-            "list_id":list_id,
-            "client_secret" : client_secret,
+            "site_id": site_id,
+            "list_id": list_id,
+            "client_secret": client_secret,
             "public_id": public_id
         }
-        
+
         if segment_id:
-            SEGMENT_COLLECTION.update_one({'_id': segment_id} , {'$push' : {'integrations' : new_integration}})
+            SEGMENT_COLLECTION.update_one(
+                {'_id': segment_id}, {'$push': {'integrations': new_integration}})
         else:
-            USER_COLLECTION.update_one({'_id': user_id}, {'$push' : {'integrations' : new_integration}})
+            USER_COLLECTION.update_one(
+                {'_id': user_id}, {'$push': {'integrations': new_integration}})
 
-
-        filter_query = build_filter(company_id,filters)
+        filter_query = build_filter(company_id, filters)
 
         # update_integration(company_id,api_key,integration_name,site_id,list_id)
 
         job = scheduler.add_job(func=update_integration, misfire_grace_time=15*60,
-                            args=[company_id,api_key,integration_name,site_id,list_id,filter_query])
-        
+                                args=[company_id, api_key, integration_name, site_id, list_id, filter_query])
+
         job.modify(next_run_time=datetime.now())
 
         return jsonify('Done!')
@@ -1521,6 +303,7 @@ def add_integration():
         return jsonify({"error": "Token has expired"}), 401
     except jwt.DecodeError as e:
         return jsonify({"error": "Invalid token"}), 401
+
 
 @app.route("/api/add-segment", methods=['POST'])
 def add_segment():
@@ -1532,7 +315,6 @@ def add_segment():
         company_id = data.get('company_id')
         segment_name = data.get('segment_name')
         filters = data.get('filters')
-        
 
         user = USER_COLLECTION.find_one({'_id': user_id})
 
@@ -1544,21 +326,29 @@ def add_segment():
             "attached_company": company_id,
             "created_by": user["user_name"],
             "filters": filters,
-            "integrations" : []
+            "integrations": []
         }
 
         SEGMENT_COLLECTION.insert_one(new_segment)
 
         job = scheduler.add_job(func=create_df_file_from_db, misfire_grace_time=15*60,
-                            args=[company_id,segment_id,filters])
-        
+                                args=[AZURE_ACCOUNT_URL,
+                                      AZURE_CONNECTION_BLOB_STRING,
+                                      USERS_FILE_COLUMNS_ORDER,
+                                      JOURNEY_FILE_COLUMNS_ORDER,
+                                      ENGINE,
+                                      AZURE_CONTAINER_NAME,
+                                      company_id,
+                                        segment_id,
+                                      filters])
+
         job.modify(next_run_time=datetime.now())
 
-        filter_query = build_filter(company_id,filters)
+        filter_query = build_filter(company_id, filters)
 
-        update_company_counts(company_id,segment_id,filter_query)
-        update_popular_chart(company_id,segment_id,filter_query)
-        update_by_percent(company_id,segment_id,filter_query)
+        update_company_counts(company_id, segment_id, filter_query)
+        update_popular_chart(company_id, segment_id, filter_query)
+        update_by_percent(company_id, segment_id, filter_query)
 
         return jsonify('Done!')
     except jwt.ExpiredSignatureError:
@@ -1580,7 +370,6 @@ def delete_user():
     return jsonify('done!')
 
 
-
 @app.route("/api/delete-integration", methods=['POST'])
 def delete_integration():
     data = request.get_json()
@@ -1594,12 +383,10 @@ def delete_integration():
         )
     else:
         USER_COLLECTION.update_one(
-                {'integrations.id': integration_id},
-                {'$pull': {'integrations': {'id': integration_id}}}
-            )
+            {'integrations.id': integration_id},
+            {'$pull': {'integrations': {'id': integration_id}}}
+        )
     return jsonify('done!')
-
-
 
 
 @app.route("/api/delete-company", methods=['POST'])
@@ -1611,9 +398,8 @@ def delete_company():
     COMPANIES_COLLECTION.delete_one({'_id': company_id})
     USER_COLLECTION.update_many({'companies': {'$regex': company_id}}, {
                                 '$pull': {'companies': company_id}})
-    
-    delete_postgres_table(company_id)
 
+    delete_postgres_table(company_id, ENGINE)
 
     return jsonify("done!")
 
@@ -1628,7 +414,8 @@ def delete_segment():
 
     # blob_name = f'{segment["attached_company"]}/{segment_id}'
 
-    delete_from_azure_blob(AZURE_CONTAINER_NAME,segment["attached_company"],segment_id)
+    delete_from_azure_blob(AZURE_ACCOUNT_URL, AZURE_CONNECTION_BLOB_STRING,
+                           AZURE_CONTAINER_NAME, segment["attached_company"], segment_id)
 
     return jsonify("done!")
 
@@ -1650,13 +437,11 @@ def import_data():
     df['full_name'] = df['firstName'] + ' ' + df['lastName']
     df['url'] = df['url'].apply(lambda x: x.replace(
         f'{urlparse(x).scheme}://{urlparse(x).netloc}', ''))
-    
+
     df_filtered = df[desired_columns_order_journey]
     df_filtered = df_filtered.rename(columns=lambda x: camel_to_snake(x))
-    df_filtered.to_sql(company_id,ENGINE,if_exists='append',index=False)
-    
+    df_filtered.to_sql(company_id, ENGINE, if_exists='append', index=False)
 
-    
     return jsonify('Done!')
 
 
@@ -1723,7 +508,7 @@ def get_user_list():
     except jwt.DecodeError as e:
         print(e)
         return jsonify({"error": "Invalid token"}), 401
-    
+
 
 @app.route("/api/get-user-integrations", methods=['POST'])
 def get_user_integrations():
@@ -1763,10 +548,10 @@ def get_segment_list():
         company_collection = DB_CLIENT[f'{company_id}_data']
         segments = SEGMENT_COLLECTION.find({"attached_company": company_id})
 
-
         for segment in segments:
-            filter_query = build_filter(company_id,segment["filters"])
-            people_count = get_counts(company_id,get_date_query(None,None),filter_query=filter_query)[1]
+            filter_query = build_filter(company_id, segment["filters"])
+            people_count = get_counts(ENGINE, company_id, build_date_query(
+                None, None), filter_query=filter_query)[1]
             segment_list.append({
                 "segment_id": segment["_id"],
                 "segment_name": segment["segment_name"],
@@ -1798,46 +583,50 @@ def get_data():
     data_type = data.get('data_type')
     full_data = data.get('full_data')
 
-
     try:
         if len(filters) > 0:
-            filter_query = build_filter(company_id,filters, column_filters)
+            filter_query = build_filter(company_id, filters, column_filters)
 
         elif len(filters) == 0:
             return jsonify('ignore')
     except TypeError:
         try:
             if filters[0] == 'segnew':
-                filter_query = build_filter(company_id,filter_params=filters[1])
+                filter_query = build_filter(
+                    company_id, filter_params=filters[1])
         except IndexError:
             filter_query = build_filter(
-                company_id,filter_params=None, column_filters=column_filters)
+                company_id, filter_params=None, column_filters=column_filters)
         except TypeError:
             filter_query = build_filter(
-                company_id,filter_params=None, column_filters=column_filters)
-
+                company_id, filter_params=None, column_filters=column_filters)
 
     skip = page * ITEMS_PER_PAGE
 
-    date_range_query = get_date_query(start_date,end_date)
+    date_range_query = build_date_query(start_date, end_date)
 
     if filter_query is None:
         if full_data:
             if data_type == 'users':
-                query = text(f"SELECT DISTINCT ON (full_name) full_name, email, maid, maid_os FROM {company_id} WHERE {date_range_query};")
+                query = text(
+                    f"SELECT DISTINCT ON (full_name) full_name, email, maid, maid_os FROM {company_id} WHERE {date_range_query};")
 
                 with ENGINE.connect() as connection:
                     data = connection.execute(query)
-                    result = [dict(list(zip(['index', 'full_name', 'email', 'maid', 'maid_os'], [index + 1] + list(row)))) for index, row in enumerate(data)]
+                    result = [dict(list(zip(['index', 'full_name', 'email', 'maid', 'maid_os'], [
+                                   index + 1] + list(row)))) for index, row in enumerate(data)]
 
                 return jsonify(result)
             else:
-                query = text(f"SELECT  * FROM {company_id} WHERE {date_range_query};")
+                query = text(
+                    f"SELECT  * FROM {company_id} WHERE {date_range_query};")
         else:
             if data_type == 'users':
-                query = text(f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE ({date_range_query}) LIMIT {ITEMS_PER_PAGE} OFFSET {skip};")
+                query = text(
+                    f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE ({date_range_query}) LIMIT {ITEMS_PER_PAGE} OFFSET {skip};")
             else:
-                query = text(f"SELECT  * FROM {company_id} WHERE ({date_range_query}) LIMIT {ITEMS_PER_PAGE} OFFSET {skip};")
+                query = text(
+                    f"SELECT  * FROM {company_id} WHERE ({date_range_query}) LIMIT {ITEMS_PER_PAGE} OFFSET {skip};")
 
     else:
         if full_data:
@@ -1871,8 +660,6 @@ def get_data():
                     LIMIT {ITEMS_PER_PAGE} OFFSET {skip}
                 """)
 
-    # query = text(f"SELECT * FROM {company_id} LIMIT {ITEMS_PER_PAGE} OFFSET {skip};")
-    print('asd')
 
     with ENGINE.connect() as connection:
         data = connection.execute(query)
@@ -1881,7 +668,6 @@ def get_data():
 
     # Return data as JSON
     return jsonify(result)
-
 
 
 @app.route("/api/get-user-details", methods=['POST'])
@@ -1902,19 +688,16 @@ def get_user_details():
         return jsonify({"error": "Token has expired"}), 401
     except jwt.DecodeError as e:
         return jsonify({"error": "Invalid token"}), 401
-    
+
+
 @app.route("/api/get-user-journey", methods=['POST'])
 def get_user_journey():
     data = request.get_json()
     company_id = data.get('id').lower()
-    user_name= data.get('user_name')
+    user_name = data.get('user_name')
     start_date = data.get('start-date')
     end_date = data.get('end-date')
     filters = data.get('filters')
-
-    filter_query = build_filter(company_id,filters)
-
-    date_range_query = get_date_query(start_date,end_date)
 
     query = text(f"""
         SELECT 
@@ -1957,24 +740,10 @@ def get_user_journey():
             organized_data[date] = [document]
 
     # Convert the organized data to a list for jsonify
-    result = [{'date': date, 'documents': documents} for date, documents in organized_data.items()]
+    result = [{'date': date, 'documents': documents}
+              for date, documents in organized_data.items()]
 
     return jsonify(result)
-
-
-
-
-@app.route("/api/get-income-credit", methods=['POST'])
-def get_income_credit():
-    data = request.get_json()
-    company_id = data.get('id').lower()
-    start_date = data.get('start-date')
-    end_date = data.get('end-date')
-
-    date_range_query = get_date_query(start_date,end_date)
-
-    popular_states, popular_states_counts = get_most_popular(company_id, date_range_query, 'state')
-
 
 
 @app.route("/api/get-company-counts", methods=['POST'])
@@ -1992,33 +761,35 @@ def get_company_counts():
         segment_id = request.json.get('segment_id')
 
         print(f'com {company_id}')
-        filter_query = build_filter(company_id,filters)
+        filter_query = build_filter(company_id, filters)
 
         try:
             if any([start_date == 'undefined', start_date == None]):
                 if segment_id:
                     company = SEGMENT_COLLECTION.find_one({'_id': segment_id})
                 else:
-                    company = COMPANIES_COLLECTION.find_one({'_id': company_id})
+                    company = COMPANIES_COLLECTION.find_one(
+                        {'_id': company_id})
                 counts = company['counts']
                 response = {
                     'people_count': counts['people_count'],
                     'journey_count': counts['journey_count'],
                 }
             else:
-                date_range_query = get_date_query(start_date, end_date)
+                date_range_query = build_date_query(start_date, end_date)
 
-                journey_count, people_count = get_counts(company_id,date_range_query,filter_query)
+                journey_count, people_count = get_counts(
+                    ENGINE,company_id, date_range_query, filter_query)
 
                 response = {
                     'people_count': people_count,
                     'journey_count': journey_count,
                 }
         except KeyError:
-                response = {
-                    'people_count': 0,
-                    'journey_count': 0,
-                }
+            response = {
+                'people_count': 0,
+                'journey_count': 0,
+            }
         return jsonify(response), 200
     except jwt.ExpiredSignatureError:
         return jsonify({"error": "Token has expired"}), 401
@@ -2033,7 +804,6 @@ def get_by_precent_counts():
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
 
-
         company_id = request.json.get('company_id')
         start_date = request.json.get('start_date')
         end_date = request.json.get('end_date')
@@ -2041,14 +811,15 @@ def get_by_precent_counts():
         filters = request.json.get('filters')
         segment_id = request.json.get('segment_id')
 
-        filter_query = build_filter(company_id,filters)
+        filter_query = build_filter(company_id, filters)
 
         try:
             if any([start_date == 'undefined', start_date == None]):
                 if segment_id:
                     company = SEGMENT_COLLECTION.find_one({'_id': segment_id})
                 else:
-                    company = COMPANIES_COLLECTION.find_one({'_id': company_id})
+                    company = COMPANIES_COLLECTION.find_one(
+                        {'_id': company_id})
                 print('after')
                 by_precent_chart = company['by_percent_chart'][field]
                 response = {
@@ -2056,9 +827,10 @@ def get_by_precent_counts():
                     'counts': by_precent_chart['count_list']
                 }
             else:
-                date_range_query = get_date_query(start_date, end_date)
+                date_range_query = build_date_query(start_date, end_date)
 
-                item_list, count_list = get_by_precent_count(company_id,field,date_range_query,filter_query)
+                item_list, count_list = get_by_precent_count(
+                    ENGINE, company_id, field, date_range_query, filter_query)
 
                 response = {
                     'items': item_list,
@@ -2066,9 +838,9 @@ def get_by_precent_counts():
                 }
         except KeyError as e:
             response = {
-                    'items': [],
-                    'counts': []
-                }
+                'items': [],
+                'counts': []
+            }
 
         return jsonify(response), 200
 
@@ -2077,8 +849,6 @@ def get_by_precent_counts():
     except jwt.DecodeError as e:
         print(e)
         return jsonify({"error": "Invalid token"}), 401
-
-
 
 
 @app.route("/api/get-company-popular", methods=['POST'])
@@ -2097,8 +867,7 @@ def get_company_popular():
         filters = request.json.get('filters')
         segment_id = request.json.get('segment_id')
 
-        filter_query = build_filter(company_id,filters)
-
+        filter_query = build_filter(company_id, filters)
 
         try:
             if any([start_date == 'undefined', start_date == None]) and popular_type != 'city':
@@ -2106,7 +875,8 @@ def get_company_popular():
                     print(segment_id)
                     company = SEGMENT_COLLECTION.find_one({'_id': segment_id})
                 else:
-                    company = COMPANIES_COLLECTION.find_one({'_id': company_id})
+                    company = COMPANIES_COLLECTION.find_one(
+                        {'_id': company_id})
                 popular_chart = company["popular_chart"][popular_type]
 
                 response = {
@@ -2114,9 +884,10 @@ def get_company_popular():
                     'popular_items_counts': popular_chart['count_list']
                 }
             else:
-                date_range_query = get_date_query(start_date, end_date)
+                date_range_query = build_date_query(start_date, end_date)
 
-                popular_items, popular_items_counts = get_most_popular(company_id,date_range_query,popular_type,state,filter_query)
+                popular_items, popular_items_counts = get_most_popular(
+                    ENGINE, company_id, date_range_query, popular_type, state, filter_query)
 
                 response = {
                     'popular_items': popular_items,
@@ -2124,9 +895,9 @@ def get_company_popular():
                 }
         except KeyError:
             response = {
-                    'popular_items': [],
-                    'popular_items_counts': []
-                }
+                'popular_items': [],
+                'popular_items_counts': []
+            }
 
         return jsonify(response), 200
     except jwt.ExpiredSignatureError:
@@ -2144,6 +915,164 @@ def get_segment_filters():
     segment = SEGMENT_COLLECTION.find_one({"_id": str(segment_id)})
 
     return jsonify(segment["filters"])
+
+
+@app.route("/api/get-compare-data", methods=['POST'])
+def get_compare_data():
+    data = request.get_json()
+    company_id = data.get('company_id')
+    filters = data.get('filters')
+    segment_id = data.get('segment_id')
+    selection_one = data.get('selection_one')
+    selection_two = data.get('selection_two')
+    compare_type = data.get('compare_type')
+    url_selection = data.get('url_selection')
+    card_name_dict = {
+        "age" : 'Average Age',
+        "net_worth" : "Average Net Worth",
+        "credit_range": "Average Credit Range",
+        "income_levels": "Average Income Levels",
+        "home_price" : "Average Home Price",
+        "home_value" : "Average Home Value",
+        "mortgage_amount" : "Average Mortgage Amount",
+        "mortgage_age": "Average Mortgage Age",
+        "ethnic_group" : "Ethnic Group By Percent",
+        "journey": "Total Journeys Captured",
+        "people": "Total Users Captured"
+    }
+
+    average_columns = [
+    'age',
+    'net_worth',
+    'credit_range',
+    'income_levels',
+    'home_value',
+    'mortgage_amount',
+    'mortgage_age',
+    ]
+
+    by_percent_columns = [
+        'ethnic_group',
+    ]
+
+
+    average_data_dict_one = {}
+    average_data_dict_two = {}
+
+    average_final_list = []
+    by_percent_final_list = []
+    total_list_final_list = []
+
+    if compare_type == 'Date':
+        selection_one_date_query = build_date_query(selection_one["startDate"],selection_one["endDate"])
+        selection_two_date_query = build_date_query(selection_two["startDate"],selection_two["endDate"])
+        filter_query_one = None
+        filter_query_two = None
+
+    elif compare_type == 'URL':
+        filters_dict_one = [{
+            "id": "contains",
+            "value" : {
+                "include_array" : [
+                    {"value": url_selection["selection_one"]["val"], "type": url_selection["selection_one"]["prefix"]},
+                ],
+                "exclude_array": []
+            }
+        }]
+        filters_dict_two = [{
+            "id": "contains",
+            "value" : {
+                "include_array" : [
+                    {"value": url_selection["selection_two"]["val"], "type": url_selection["selection_two"]["prefix"]}
+                ],
+                "exclude_array": []
+            }
+        }]
+
+        filter_query_one = build_filter(company_id,filters_dict_one)
+        filter_query_two = build_filter(company_id,filters_dict_two)
+        selection_one_date_query = build_date_query()
+        selection_two_date_query = build_date_query()
+
+
+
+    for value in by_percent_columns:
+        item_list_one, count_list_one = get_by_precent_count(ENGINE, company_id, value, selection_one_date_query,filter_query_one)
+        item_list_two, count_list_two = get_by_precent_count(ENGINE, company_id, value, selection_two_date_query,filter_query_two)
+
+        try:
+            percent_list = []
+            for index, item in enumerate(count_list_one):
+                original_value = count_list_two[index]
+                new_value = item
+
+                percentage_change = calculate_percentage_change(original_value, new_value)
+
+                percent_list.append(percentage_change)
+        except Exception:
+            pass
+        
+        by_percent_final_list.append({
+            'item_list': item_list_one,
+            'item_count_list': count_list_one,
+            'percent_change': percent_list,
+            'obj_name' : card_name_dict[value]
+        })
+
+    journey_count_one, people_count_one = get_counts(ENGINE,company_id,selection_one_date_query,filter_query_one)
+    journey_count_two, people_count_two = get_counts(ENGINE,company_id,selection_two_date_query,filter_query_two)
+    original_value_journey = journey_count_two
+    original_value_people = people_count_two
+    new_value_journey = journey_count_one
+    new_value_people = people_count_one
+
+
+    percentage_change_journey = calculate_percentage_change(original_value_journey, new_value_journey)
+    percentage_change_people = calculate_percentage_change(original_value_people, new_value_people)
+
+
+    average_final_list.append({
+        'card_value': format(new_value_journey,","),
+        'card_compare_percent': percentage_change_journey,
+        'card_name' : card_name_dict['journey']
+    })
+
+    average_final_list.append({
+        'card_value': format(new_value_people,","),
+        'card_compare_percent': percentage_change_people,
+        'card_name' : card_name_dict['people']
+    })
+
+    for value in average_columns:
+        average_data_dict_one[value] = get_average(ENGINE,value,company_id,selection_one_date_query,filter_query_one)
+        average_data_dict_two[value] = get_average(ENGINE,value,company_id,selection_two_date_query,filter_query_two)
+
+    for key in average_data_dict_one:
+        obj = {}
+        if key in average_data_dict_two:
+            original_value = average_data_dict_two[key]
+            new_value = average_data_dict_one[key]
+
+            percentage_change = calculate_percentage_change(original_value, new_value)
+
+            # Ensure the key exists in final_dict or create it
+
+            # Update final_dict with card_value and card_compare_percent
+            obj["card_value"] = str(new_value)
+            obj["card_compare_percent"] = percentage_change
+            obj["card_name"] = card_name_dict[key]
+            average_final_list.append(obj)
+
+
+    response = {
+        'average_list' : average_final_list,
+        'by_percent_list': by_percent_final_list
+    }
+
+
+
+
+    return jsonify(response)
 
 
 @app.route("/api/update-company", methods=['POST'])
@@ -2207,27 +1136,6 @@ def update_segment():
         return jsonify({"error": "Invalid token"}), 401
 
 
-@app.route("/api/search-users", methods=['GET'])
-def search_users():
-    company_name = request.args.get('company-name').replace(" ", "_").lower()
-    collection = DB_CLIENT[f'{company_name}_data']
-    query = request.args.get('query').lower()
-    regex_query = re.compile(query, re.IGNORECASE)
-    instance = collection.find({'firstName': {"$regex": regex_query}})
-    return json.loads(json_util.dumps(list(instance)))
-
-def stream_chunked_documents(collection):
-    # Create a chunk size for streaming
-    chunk_size = 1000
-
-    # Loop through the documents in chunks
-    for chunk in collection.find({}, projection={'_id': False}, batch_size=chunk_size):
-        # Convert each document to JSON string
-        json_docs = [json.dumps(doc, default=json_util.default) for doc in chunk]
-
-        # Send the JSON string as chunk of the response
-        yield f'{json_docs}\n'
-
 
 
 @app.route("/api/create-integration", methods=['POST'])
@@ -2243,37 +1151,40 @@ def create_integration():
         list_id = data.get('list_id')
         code_list = []
 
-        integration_doc = INTEGRATION_COLLECTION.find_one({'name' : integration_name})
+        integration_doc = INTEGRATION_COLLECTION.find_one(
+            {'name': integration_name})
         if integration_doc:
-                # Build and execute the SQL query to select a random row
-                query = text(f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE CAST(date_added AS DATE) = CURRENT_DATE;")
+            # Build and execute the SQL query to select a random row
+            query = text(
+                f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE CAST(date_added AS DATE) = CURRENT_DATE;")
 
-                with ENGINE.connect() as connection:
-                    result = connection.execute(query)
-                    column_names = result.keys()
-                data = [dict(zip(column_names, row)) for row in result]
+            with ENGINE.connect() as connection:
+                result = connection.execute(query)
+                column_names = result.keys()
+            data = [dict(zip(column_names, row)) for row in result]
 
-                print(data)
+            print(data)
 
-                for row in data:
-                    if integration_name == 'Klaviyo':
-                        status_code = klayviyo_integration(api_key,row) 
-                    elif integration_name == 'Customer.io':
-                        status_code = customerIO_integration(site_id,api_key,row) 
-                    elif integration_name == 'Mailchimp':
-                        status_code = mailchimp_integration(api_key,list_id,row) 
-                    elif integration_name == 'SendGrid':
-                        status_code = sendgrid_integration(api_key,row,[list_id]) 
-                    elif integration_name == 'HubSpot':
-                        status_code = hubspot_integration(api_key,row) 
-                    elif integration_name == 'EmailOctopus':
-                        status_code = emailoctopus_integration(api_key,list_id,row) 
-                    elif integration_name == 'OmniSend':
-                        status_code = omnisend_integration(api_key,row) #done
-                    code_list.append(status_code)
+            for row in data:
+                if integration_name == 'Klaviyo':
+                    status_code = klayviyo_integration(api_key, row)
+                elif integration_name == 'Customer.io':
+                    status_code = customerIO_integration(site_id, api_key, row)
+                elif integration_name == 'Mailchimp':
+                    status_code = mailchimp_integration(api_key, list_id, row)
+                elif integration_name == 'SendGrid':
+                    status_code = sendgrid_integration(api_key, row, [list_id])
+                elif integration_name == 'HubSpot':
+                    status_code = hubspot_integration(api_key, row)
+                elif integration_name == 'EmailOctopus':
+                    status_code = emailoctopus_integration(
+                        api_key, list_id, row)
+                elif integration_name == 'OmniSend':
+                    status_code = omnisend_integration(api_key, row)  # done
+                code_list.append(status_code)
 
-                print(code_list)
-                return jsonify(200)
+            print(code_list)
+            return jsonify(200)
 
         else:
             return jsonify(404)
@@ -2281,7 +1192,7 @@ def create_integration():
         return jsonify({"error": "Token has expired"}), 401
     except jwt.DecodeError as e:
         return jsonify({"error": "Invalid token"}), 401
-    
+
 
 @app.route("/api/test-integration", methods=['POST'])
 def test_integration():
@@ -2298,58 +1209,65 @@ def test_integration():
         public_id = data.get('public_id')
         filters = data.get('filters')
 
-
-        integration_doc = INTEGRATION_COLLECTION.find_one({'name' : integration_name})
+        integration_doc = INTEGRATION_COLLECTION.find_one(
+            {'name': integration_name})
         if integration_doc:
-                # Build and execute the SQL query to select a random row
-                if filters:
-                    filter_query = build_filter(company_id,filters)
-                    query = text(f"SELECT * FROM {company_id} WHERE {filter_query} ORDER BY random() LIMIT 1;")
+            # Build and execute the SQL query to select a random row
+            if filters:
+                filter_query = build_filter(company_id, filters)
+                query = text(
+                    f"SELECT * FROM {company_id} WHERE {filter_query} ORDER BY random() LIMIT 1;")
+            else:
+                query = text(
+                    f"SELECT * FROM {company_id} ORDER BY random() LIMIT 1;")
+
+            with ENGINE.connect() as connection:
+                result = connection.execute(query)
+                random_row = result.fetchone()
+                column_names = result.keys()
+            row = dict(zip(column_names, random_row))
+
+            if integration_name == 'Klaviyo':
+                status_code = klayviyo_integration(api_key, row)  # done
+            elif integration_name == 'BayEngage':
+                print(client_secret)
+                print(public_id)
+                print(list_id)
+                if client_secret and public_id:
+                    status_code = bayengage_integration(
+                        client_secret, public_id, row, list_id)
                 else:
-                    query = text(f"SELECT * FROM {company_id} ORDER BY random() LIMIT 1;")
+                    status_code = 500
+            elif integration_name == 'Customer.io':
+                status_code = customerIO_integration(
+                    site_id, api_key, row)  # done
+            elif integration_name == 'Mailchimp':
+                status_code = mailchimp_integration(
+                    api_key, list_id, row)  # done
+            elif integration_name == 'SendGrid':
+                status_code = sendgrid_integration(
+                    api_key, row, [list_id])  # done
+            elif integration_name == 'HubSpot':
+                status_code = hubspot_integration(api_key, row)  # done
+            elif integration_name == 'EmailOctopus':
+                status_code = emailoctopus_integration(
+                    api_key, list_id, row, test=True)  # done
+            elif integration_name == 'OmniSend':
+                status_code = omnisend_integration(api_key, row)  # done
 
-                with ENGINE.connect() as connection:
-                    result = connection.execute(query)
-                    random_row = result.fetchone()
-                    column_names = result.keys()
-                row = dict(zip(column_names, random_row))
-                
-            
-                if integration_name == 'Klaviyo':
-                    status_code = klayviyo_integration(api_key,row) #done
-                elif integration_name == 'BayEngage':
-                    print(client_secret)
-                    print(public_id)
-                    print(list_id)
-                    if client_secret and public_id:
-                        status_code = bayengage_integration(client_secret,public_id,row,list_id)
-                    else:
-                        status_code = 500
-                elif integration_name == 'Customer.io':
-                    status_code = customerIO_integration(site_id,api_key,row) #done
-                elif integration_name == 'Mailchimp':
-                    status_code = mailchimp_integration(api_key,list_id,row) #done
-                elif integration_name == 'SendGrid':
-                    status_code = sendgrid_integration(api_key,row,[list_id]) #done
-                elif integration_name == 'HubSpot':
-                    status_code = hubspot_integration(api_key,row) #done
-                elif integration_name == 'EmailOctopus':
-                    status_code = emailoctopus_integration(api_key,list_id,row,test=True) #done
-                elif integration_name == 'OmniSend':
-                    status_code = omnisend_integration(api_key,row) #done
+            print(status_code)
 
-                print(status_code)
-
-                if status_code in [200,201,202] :
-                    return jsonify(200)
-                else:
-                    return jsonify(500)
+            if status_code in [200, 201, 202]:
+                return jsonify(200)
+            else:
+                return jsonify(500)
         else:
             return jsonify(404)
     except jwt.ExpiredSignatureError:
         return jsonify({"error": "Token has expired"}), 401
     except jwt.DecodeError as e:
         return jsonify({"error": "Invalid token"}), 401
+
 
 @app.route("/api/download-users", methods=['POST'])
 def download_users():
@@ -2361,24 +1279,31 @@ def download_users():
     segment_id = data.get('segment_id')
     segment_name = data.get('segment_name')
     company_name = data.get('company_name')
-    
+
     if segment_id is not None:
         csv_file_path = f'/companies/{company_id}/{segment_id}-{download_type}.csv'
         download_file_name = f'{company_name}-{segment_name}_segment-{download_type}'
     else:
         csv_file_path = f'/companies/{company_id}/main-{download_type}.csv'
         if not os.path.exists(csv_file_path):
-            create_df_file_from_db(company_id)
+            create_df_file_from_db(
+                AZURE_ACCOUNT_URL,
+                AZURE_CONNECTION_BLOB_STRING,
+                USERS_FILE_COLUMNS_ORDER,
+                JOURNEY_FILE_COLUMNS_ORDER,
+                ENGINE,
+                AZURE_CONTAINER_NAME,
+                company_id
+            )
         download_file_name = f'{company_name}-{download_type}'
 
-
     df = pd.read_csv(csv_file_path)
-    df = get_df_date_query(df,start_date,end_date)
+    df = build_df_date_query(df, start_date, end_date)
     # Create a response with the CSV data
     response = make_response(df.to_csv(index=False))
     response.headers["Content-Disposition"] = f"attachment; filename={download_file_name}.csv"
     response.headers["Content-Type"] = "text/csv"
-    
+
     return response
 
 
@@ -2389,6 +1314,73 @@ def internal_error(error):
 
     return jsonify("Not Found")
 
+
+# @app.route("/api/add-data", methods=['POST'])
+# def add_data():
+#     company_id = request.args.get('id')
+#     company_collection = DB_CLIENT[f'{company_id}_data']
+
+#     df = pd.read_csv(
+#         '/Users/neevassouline/Desktop/Coding Projects/IcewebIO/backend/people_data_20.csv')
+#     df.fillna('-', inplace=True)
+
+#     df[['date', 'hour']] = df['date'].str.split(' ', expand=True)
+#     df[['hour']] = df['hour'].str.split('+', expand=True)[[0]]
+#     df['full_name'] = df['firstName'] + ' ' + df['lastName']
+
+#     list_of_lists = df.to_dict(orient='records')
+#     company_collection.insert_many(list_of_lists)
+
+#     return jsonify('Done!')
+
+
+# from google.auth.transport.requests import Request
+# from google.auth.credentials import AnonymousCredentials
+# from google.auth.transport.requests import Request
+# from google.auth import jwt
+# from google.ads.googleads.client import GoogleAdsClient
+
+# @app.route("/api/auth/google", methods=['POST'])
+# def auth_google():
+#     code = request.json.get('code')
+#     client_id = '852749625849-0711o5c0mn6elckm3cqllf546am5u58d.apps.googleusercontent.com'
+#     client_secret = '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'
+#     redirect_uri = 'http://localhost:3000'
+#     grant_type = 'authorization_code'
+
+#     token_url = 'https://oauth2.googleapis.com/token'
+#     headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+#     data = {
+#         'code': code,
+#         'client_id': client_id,
+#         'client_secret': client_secret,
+#         'redirect_uri': redirect_uri,
+#         'grant_type': grant_type,
+#     }
+
+#     try:
+#         response = requests.post(token_url, headers=headers, data=data)
+#         response.raise_for_status()
+#         tokens = response.json()
+
+
+#         credentials = {
+#                 "developer_token": "A37QyGuX6bLSUzyCMrfvbA",
+#                 "refresh_token": tokens['refresh_token'],
+#                 "client_id": client_id,
+#                 "client_secret": client_secret,
+#                 "use_proto_plus": False}
+
+#         print(credentials)
+#         client = GoogleAdsClient.load_from_dict(credentials)
+#         # Send the tokens back to the frontend, or store them securely and create a session
+
+#         create_customer_match_user_list(client, '2315440060')
+#         return jsonify(tokens)
+#     except requests.exceptions.RequestException as e:
+#         # Handle errors in the token exchange
+#         print('Token exchange error:', e)
+#         return jsonify({'error': 'Internal Server Error'})
 
 # def update_excluded_users(segment_id):
 #     segment = SEGMENT_COLLECTION.find_one({'_id': segment_id})
@@ -2424,8 +1416,7 @@ def internal_error(error):
 #     else:
 #         print("Segment not found or an error occurred.")
 
-
-    # date_range_query = get_date_query(start_date, end_date)
+    # date_range_query = build_date_query(start_date, end_date)
 
     # else:
     #     base_query = {
@@ -2476,7 +1467,7 @@ def internal_error(error):
     #             instance = instance.sort([(option["id"], 1)])
     #         elif option["desc"] == "True":
     #             instance = instance.sort([(option["id"], -1)])
-    
+
     # if user_ids_to_exclude:
     #     response_data = {
     #         'users': json.loads(json_util.dumps(list(instance))),
