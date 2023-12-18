@@ -346,9 +346,9 @@ def add_segment():
 
         filter_query = build_filter(company_id, filters)
 
-        update_company_counts(company_id, segment_id, filter_query)
-        update_popular_chart(company_id, segment_id, filter_query)
-        update_by_percent(company_id, segment_id, filter_query)
+        update_company_counts(ENGINE,company_id,COMPANIES_COLLECTION,SEGMENT_COLLECTION,segment_id,filter_query)
+        update_popular_chart(ENGINE,company_id,SEGMENT_COLLECTION,COMPANIES_COLLECTION,segment_id,filter_query)
+        update_by_percent(ENGINE,company_id,COMPANIES_COLLECTION,SEGMENT_COLLECTION,segment_id,filter_query)
 
         return jsonify('Done!')
     except jwt.ExpiredSignatureError:
@@ -602,6 +602,8 @@ def get_data():
                 company_id, filter_params=None, column_filters=column_filters)
 
     skip = page * ITEMS_PER_PAGE
+
+    print(filter_query)
 
     date_range_query = build_date_query(start_date, end_date)
 
@@ -961,39 +963,52 @@ def get_compare_data():
 
     average_final_list = []
     by_percent_final_list = []
-    total_list_final_list = []
 
-    if compare_type == 'Date':
-        selection_one_date_query = build_date_query(selection_one["startDate"],selection_one["endDate"])
-        selection_two_date_query = build_date_query(selection_two["startDate"],selection_two["endDate"])
-        filter_query_one = None
-        filter_query_two = None
+    filters_dict_one = [{
+        "id": "contains",
+        "value" : {
+            "include_array" : [
+                {"value": url_selection["selection_one"]["val"], "type": url_selection["selection_one"]["prefix"]},
+            ],
+            "exclude_array": []
+        }
+    }]
+    filters_dict_two = [{
+        "id": "contains",
+        "value" : {
+            "include_array" : [
+                {"value": url_selection["selection_two"]["val"], "type": url_selection["selection_two"]["prefix"]}
+            ],
+            "exclude_array": []
+        }
+    }]
 
-    elif compare_type == 'URL':
-        filters_dict_one = [{
-            "id": "contains",
-            "value" : {
-                "include_array" : [
-                    {"value": url_selection["selection_one"]["val"], "type": url_selection["selection_one"]["prefix"]},
-                ],
-                "exclude_array": []
-            }
-        }]
-        filters_dict_two = [{
-            "id": "contains",
-            "value" : {
-                "include_array" : [
-                    {"value": url_selection["selection_two"]["val"], "type": url_selection["selection_two"]["prefix"]}
-                ],
-                "exclude_array": []
-            }
-        }]
+    if filters is not None:
+        if compare_type == 'Date':
+            selection_one_date_query = build_date_query(selection_one["startDate"],selection_one["endDate"])
+            selection_two_date_query = build_date_query(selection_two["startDate"],selection_two["endDate"])
+            filter_query_one = build_filter(company_id,filters)
+            filter_query_two = build_filter(company_id,filters)
 
-        filter_query_one = build_filter(company_id,filters_dict_one)
-        filter_query_two = build_filter(company_id,filters_dict_two)
-        selection_one_date_query = build_date_query()
-        selection_two_date_query = build_date_query()
+        elif compare_type == 'URL':
+            filter_query_one = text(f'{build_filter(company_id,filters_dict_one)} AND {build_filter(company_id,filters)}')
+            filter_query_two = text(f'{build_filter(company_id,filters_dict_two)} AND {build_filter(company_id,filters)}')
+            selection_one_date_query = build_date_query()
+            selection_two_date_query = build_date_query()
+    else:
+        if compare_type == 'Date':
+            selection_one_date_query = build_date_query(selection_one["startDate"],selection_one["endDate"])
+            selection_two_date_query = build_date_query(selection_two["startDate"],selection_two["endDate"])
+            filter_query_one = None
+            filter_query_two = None
 
+        elif compare_type == 'URL':
+            filter_query_one = build_filter(company_id,filters_dict_one)
+            filter_query_two = build_filter(company_id,filters_dict_two)
+            selection_one_date_query = build_date_query()
+            selection_two_date_query = build_date_query()
+
+    print(filter_query_one)
 
 
     for value in by_percent_columns:
