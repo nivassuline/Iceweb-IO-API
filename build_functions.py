@@ -39,7 +39,7 @@ def build_filter(company_id,filter_params=None, column_filters=None):
                 max_val = int(filter_value['maxVal'])
 
                 filters.append(
-                    text(f"{column_name} >= '{min_val}' AND {column_name} <= '{max_val}'")
+                    text(f"({column_name} >= '{min_val}' AND {column_name} <= '{max_val}')")
                 )
             elif filter_key == 'contains':
                 or_arr = []
@@ -107,10 +107,10 @@ def build_filter(company_id,filter_params=None, column_filters=None):
                 or_arr = []
 
                 for value in value_arr:
-                    or_arr.append(text(f"{column_name} ILIKE '%{value}%'"))
+                    or_arr.append(text(f"{column_name} LIKE '%{value}%'"))
 
                 if or_arr:
-                    filters.append(text(' OR '.join([str(expr) for expr in or_arr])))
+                    filters.append(f"({text(' OR '.join([str(expr) for expr in or_arr]))})")
             else:
                 filters.append(
                     text(f"{filter_key} ILIKE '%{filter_value}%")
@@ -138,7 +138,6 @@ def build_filter(company_id,filter_params=None, column_filters=None):
     else:
         return None  # No filters
      
-
 
 def build_df_date_query(df, start_date, end_date, search=None):
     # Assume df is your Pandas DataFrame containing the 'date' column

@@ -296,7 +296,7 @@ def get_counts(ENGINE, table_name, date_range_query, filter_query=None):
             """)
             result = connection.execute(query).fetchall()
             journey_count = connection.execute(
-                text(f"SELECT COUNT(*) FROM {table_name} WHERE {date_range_query}")).scalar()
+                text(f"SELECT COUNT(*) FROM {table_name} WHERE {date_range_query} AND {filter_query}")).scalar()
             try:
                 # Assuming "full_name" is the first column in the SELECT statement
                 people_count = result[0][0]
