@@ -107,7 +107,7 @@ def build_filter(company_id,filter_params=None, column_filters=None):
                 or_arr = []
 
                 for value in value_arr:
-                    or_arr.append(text(f"{column_name} = '{value}'"))
+                    or_arr.append(text(f"{column_name} ILIKE '%{value}%'"))
 
                 if or_arr:
                     filters.append(text(' OR '.join([str(expr) for expr in or_arr])))
