@@ -24,8 +24,11 @@ from app_functions import *
 from update_functions import *
 from get_functions import *
 from build_functions import *
+import logging
+
 
 app = Flask(__name__)
+app.logger.setLevel(logging.INFO)
 CORS(app)
 bcrypt = Bcrypt(app)
 scheduler = BackgroundScheduler()
@@ -45,6 +48,7 @@ USER_COLLECTION = DB_CLIENT['users']
 ROLE_COLLECTION = DB_CLIENT['roles']
 SEGMENT_COLLECTION = DB_CLIENT['segments']
 INTEGRATION_COLLECTION = DB_CLIENT['integrations']
+LOGS_COLLECTION = DB_CLIENT['logs']
 SECRET_KEY = 'iceweb123456789'
 AZURE_ACCOUNT_URL = "https://icewebstorage.blob.core.windows.net"
 AZURE_CONNECTION_BLOB_STRING = "zQNgBDFROUur92AMQIDwSoIm3Fswg4rCmjHniH3wvIMLnP8ewXdBISHa1yCxG/obFJHufoAlo/NZ+ASt5bMcvg=="
@@ -163,10 +167,17 @@ def login():
             'user_id': user['_id'],
             'token': token
         }
+        add_log(LOGS_COLLECTION,request.endpoint,{"email" : email, "password": user["user_password"]},response,user_id=user["_id"])
         return jsonify(response), 200
     else:
-        # Invalid credentials
+        response = {
+            'message': 'Login Failed',
+            'user_id': user['_id'],
+        }
+        add_log(LOGS_COLLECTION,request.endpoint,{"email" : email, "password": user["user_password"]},response,user_id=user["_id"])
         return jsonify({'error': 'Login failed'}), 401  # Unauthorized
+
+         
 
 
 @app.route("/api/register", methods=['POST'])
@@ -1328,6 +1339,7 @@ def internal_error(error):
     print(error)
 
     return jsonify("Not Found")
+
 
 
 # @app.route("/api/add-data", methods=['POST'])
