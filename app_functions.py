@@ -119,3 +119,18 @@ def calculate_percentage_change(original_value, new_value):
         return "100.00%"
     percentage_change = ((new_value - original_value) / abs(original_value)) * 100.0
     return f"{percentage_change:.2f}%"
+
+def add_log(collection,endpoint,request_data,response,user_id=None,company_id=None,segment_id=None):
+        log = {
+            "endpoint" : endpoint,
+            "request_data" : request_data,
+            "response" : response,
+        }
+        if user_id:
+            log["user_id"] = user_id
+        if company_id:
+            log["company_id"] = company_id
+        if segment_id:
+            log["segment_id"] = segment_id
+
+        collection.insert_one(log)
