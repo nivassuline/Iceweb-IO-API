@@ -929,6 +929,105 @@ def get_segment_filters():
 
     return jsonify(segment["filters"])
 
+@app.route("/api/get-company-utm", methods=['POST'])
+def get_company_utm():
+    data = request.get_json()
+    company_id = data.get('company_id')
+    segment_id = data.get('segment_id')
+    selection = data.get('selection')
+    filters = data.get('filters')
+
+    print(f'asdasd {filters}')
+
+    filters = build_filter(company_id,filters)
+
+    if filters is not None:
+        if selection == 'source':
+            query = text(f"""
+                    SELECT DISTINCT
+                        regexp_replace(
+                            CASE
+                                WHEN url LIKE '%utm_source%' THEN regexp_substr(url, 'utm_source=([^&]+)')
+                                WHEN url LIKE '%src%' THEN regexp_substr(url, 'src=([^&]+)')
+                            END,
+                            'utm_source=|src=',
+                            ''
+                        ) AS parameter_value
+                    FROM
+                        {company_id}
+                    WHERE
+                        (url LIKE '%utm_source%'
+                        OR url LIKE '%src%')
+                        AND 
+                        ({filters});
+                            """)
+        elif selection == 'medium':
+            query = text(f"""
+                    SELECT DISTINCT
+                        regexp_replace(regexp_substr(url, 'utm_medium=([^&]+)'), 'utm_medium=', '') AS utm_medium
+                    FROM
+                        {company_id}
+                    WHERE
+                        (url LIKE '%utm_medium%')
+                        AND
+                        ({filters});
+                            """)
+        elif selection == 'name':
+            query = text(f"""
+                    SELECT DISTINCT
+                        regexp_replace(regexp_substr(url, 'utm_campaign=([^&]+)'), 'utm_campaign=', '') AS utm_campaign
+                    FROM
+                        {company_id}
+                    WHERE
+                        (url LIKE '%utm_campaign%')
+                        AND
+                        ({filters});
+                            """)
+    else:
+        if selection == 'source':
+            query = text(f"""
+                    SELECT DISTINCT
+                        regexp_replace(
+                            CASE
+                                WHEN url LIKE '%utm_source%' THEN regexp_substr(url, 'utm_source=([^&]+)')
+                                WHEN url LIKE '%src%' THEN regexp_substr(url, 'src=([^&]+)')
+                            END,
+                            'utm_source=|src=',
+                            ''
+                        ) AS parameter_value
+                    FROM
+                        {company_id}
+                    WHERE
+                        url LIKE '%utm_source%'
+                        OR url LIKE '%src%';
+                            """)
+        elif selection == 'medium':
+            query = text(f"""
+                    SELECT DISTINCT
+                        regexp_replace(regexp_substr(url, 'utm_medium=([^&]+)'), 'utm_medium=', '') AS utm_medium
+                    FROM
+                        {company_id}
+                    WHERE
+                        url LIKE '%utm_medium%';
+                            """)
+        elif selection == 'name':
+            query = text(f"""
+                    SELECT DISTINCT
+                        regexp_replace(regexp_substr(url, 'utm_campaign=([^&]+)'), 'utm_campaign=', '') AS utm_campaign
+                    FROM
+                        {company_id}
+                    WHERE
+                        url LIKE '%utm_campaign%';
+                            """)
+            
+    with ENGINE.connect() as connection:
+        result = connection.execute(query)
+        result_list = [row[0] for row in result.fetchall()]
+        print(result_list)
+        return jsonify(result_list)
+
+
+
 
 @app.route("/api/get-compare-data", methods=['POST'])
 def get_compare_data():
@@ -940,6 +1039,7 @@ def get_compare_data():
     selection_two = data.get('selection_two')
     compare_type = data.get('compare_type')
     url_selection = data.get('url_selection')
+    utm_selection = data.get('utm_selection')
     card_name_dict = {
         "age" : 'Average Age',
         "net_worth" : "Average Net Worth",
@@ -975,6 +1075,23 @@ def get_compare_data():
     average_final_list = []
     by_percent_final_list = []
 
+    utm_filters_dict_one = [{
+        "id": "contains",
+        "value" : {
+            "include_array" : [{"value": f'={value}', "type": 'contain'} for value in utm_selection["selection_one"]["values"]],
+            "exclude_array": []
+        }
+    }]
+
+    utm_filters_dict_two = [{
+        "id": "contains",
+        "value" : {
+            "include_array" : [{"value": f'={value}', "type": 'contain'} for value in utm_selection["selection_two"]["values"]],
+            "exclude_array": []
+        }
+    }]
+
+
     filters_dict_one = [{
         "id": "contains",
         "value" : {
@@ -994,32 +1111,60 @@ def get_compare_data():
         }
     }]
 
+    filter_utm_one = build_filter(company_id,utm_filters_dict_one)
+    filter_utm_two = build_filter(company_id,utm_filters_dict_two)
+
     if filters is not None:
-        if compare_type == 'Date':
-            selection_one_date_query = build_date_query(selection_one["startDate"],selection_one["endDate"])
-            selection_two_date_query = build_date_query(selection_two["startDate"],selection_two["endDate"])
-            filter_query_one = build_filter(company_id,filters)
-            filter_query_two = build_filter(company_id,filters)
+        if filter_utm_one is not None:
+            if compare_type == 'Date':
+                selection_one_date_query = build_date_query(selection_one["startDate"],selection_one["endDate"])
+                selection_two_date_query = build_date_query(selection_two["startDate"],selection_two["endDate"])
+                filter_query_one = text(f'{build_filter(company_id,filters)} AND {filter_utm_one}')
+                filter_query_two = text(f'{build_filter(company_id,filters)} AND {filter_utm_two}')
 
-        elif compare_type == 'URL':
-            filter_query_one = text(f'{build_filter(company_id,filters_dict_one)} AND {build_filter(company_id,filters)}')
-            filter_query_two = text(f'{build_filter(company_id,filters_dict_two)} AND {build_filter(company_id,filters)}')
-            selection_one_date_query = build_date_query()
-            selection_two_date_query = build_date_query()
+            elif compare_type == 'URL':
+                filter_query_one = text(f'{build_filter(company_id,filters_dict_one)} AND {build_filter(company_id,filters)} AND {filter_utm_one}')
+                filter_query_two = text(f'{build_filter(company_id,filters_dict_two)} AND {build_filter(company_id,filters)} AND {filter_utm_two}')
+                selection_one_date_query = build_date_query()
+                selection_two_date_query = build_date_query()
+        else:
+            if compare_type == 'Date':
+                selection_one_date_query = build_date_query(selection_one["startDate"],selection_one["endDate"])
+                selection_two_date_query = build_date_query(selection_two["startDate"],selection_two["endDate"])
+                filter_query_one = build_filter(company_id,filters)
+                filter_query_two = build_filter(company_id,filters)
+
+            elif compare_type == 'URL':
+                filter_query_one = text(f'{build_filter(company_id,filters_dict_one)} AND {build_filter(company_id,filters)}')
+                filter_query_two = text(f'{build_filter(company_id,filters_dict_two)} AND {build_filter(company_id,filters)}')
+                selection_one_date_query = build_date_query()
+                selection_two_date_query = build_date_query()
     else:
-        if compare_type == 'Date':
-            selection_one_date_query = build_date_query(selection_one["startDate"],selection_one["endDate"])
-            selection_two_date_query = build_date_query(selection_two["startDate"],selection_two["endDate"])
-            filter_query_one = None
-            filter_query_two = None
+        if utm_selection is not None:
+            if compare_type == 'Date':
+                selection_one_date_query = build_date_query(selection_one["startDate"],selection_one["endDate"])
+                selection_two_date_query = build_date_query(selection_two["startDate"],selection_two["endDate"])
+                filter_query_one = filter_utm_one
+                filter_query_two = filter_utm_two
 
-        elif compare_type == 'URL':
-            filter_query_one = build_filter(company_id,filters_dict_one)
-            filter_query_two = build_filter(company_id,filters_dict_two)
-            selection_one_date_query = build_date_query()
-            selection_two_date_query = build_date_query()
+            elif compare_type == 'URL':
+                filter_query_one = text(f'{build_filter(company_id,filters_dict_one)} AND {filter_utm_one}')
+                filter_query_two = text(f'{build_filter(company_id,filters_dict_two)} AND {filter_utm_two}')
+                selection_one_date_query = build_date_query()
+                selection_two_date_query = build_date_query()
+        else:
+            if compare_type == 'Date':
+                selection_one_date_query = build_date_query(selection_one["startDate"],selection_one["endDate"])
+                selection_two_date_query = build_date_query(selection_two["startDate"],selection_two["endDate"])
+                filter_query_one = None
+                filter_query_two = None
 
-    print(filter_query_one)
+            elif compare_type == 'URL':
+                filter_query_one = build_filter(company_id,filters_dict_one)
+                filter_query_two = build_filter(company_id,filters_dict_two)
+                selection_one_date_query = build_date_query()
+                selection_two_date_query = build_date_query()
+
 
 
     for value in by_percent_columns:
@@ -1339,170 +1484,3 @@ def internal_error(error):
     print(error)
 
     return jsonify("Not Found")
-
-
-
-# @app.route("/api/add-data", methods=['POST'])
-# def add_data():
-#     company_id = request.args.get('id')
-#     company_collection = DB_CLIENT[f'{company_id}_data']
-
-#     df = pd.read_csv(
-#         '/Users/neevassouline/Desktop/Coding Projects/IcewebIO/backend/people_data_20.csv')
-#     df.fillna('-', inplace=True)
-
-#     df[['date', 'hour']] = df['date'].str.split(' ', expand=True)
-#     df[['hour']] = df['hour'].str.split('+', expand=True)[[0]]
-#     df['full_name'] = df['firstName'] + ' ' + df['lastName']
-
-#     list_of_lists = df.to_dict(orient='records')
-#     company_collection.insert_many(list_of_lists)
-
-#     return jsonify('Done!')
-
-
-# from google.auth.transport.requests import Request
-# from google.auth.credentials import AnonymousCredentials
-# from google.auth.transport.requests import Request
-# from google.auth import jwt
-# from google.ads.googleads.client import GoogleAdsClient
-
-# @app.route("/api/auth/google", methods=['POST'])
-# def auth_google():
-#     code = request.json.get('code')
-#     client_id = '852749625849-0711o5c0mn6elckm3cqllf546am5u58d.apps.googleusercontent.com'
-#     client_secret = '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'
-#     redirect_uri = 'http://localhost:3000'
-#     grant_type = 'authorization_code'
-
-#     token_url = 'https://oauth2.googleapis.com/token'
-#     headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-#     data = {
-#         'code': code,
-#         'client_id': client_id,
-#         'client_secret': client_secret,
-#         'redirect_uri': redirect_uri,
-#         'grant_type': grant_type,
-#     }
-
-#     try:
-#         response = requests.post(token_url, headers=headers, data=data)
-#         response.raise_for_status()
-#         tokens = response.json()
-
-
-#         credentials = {
-#                 "developer_token": "A37QyGuX6bLSUzyCMrfvbA",
-#                 "refresh_token": tokens['refresh_token'],
-#                 "client_id": client_id,
-#                 "client_secret": client_secret,
-#                 "use_proto_plus": False}
-
-#         print(credentials)
-#         client = GoogleAdsClient.load_from_dict(credentials)
-#         # Send the tokens back to the frontend, or store them securely and create a session
-
-#         create_customer_match_user_list(client, '2315440060')
-#         return jsonify(tokens)
-#     except requests.exceptions.RequestException as e:
-#         # Handle errors in the token exchange
-#         print('Token exchange error:', e)
-#         return jsonify({'error': 'Internal Server Error'})
-
-# def update_excluded_users(segment_id):
-#     segment = SEGMENT_COLLECTION.find_one({'_id': segment_id})
-#     if segment:
-#         filters = segment['filters']
-#         company_id = segment['attached_company']
-#         collection = DB_CLIENT[f'{company_id}_data']
-#         user_ids_to_exclude = set()
-
-#         # Compile regex patterns for different types outside the loop
-#         regex_patterns = {
-#             'contain': (lambda value: re.compile(re.escape(value), re.IGNORECASE)),
-#             'start': (lambda value: re.compile(f"^{re.escape(value)}", re.IGNORECASE)),
-#             'end': (lambda value: re.compile(f"{re.escape(value)}$", re.IGNORECASE)),
-#         }
-
-#         for filter_item in filters:
-#             if filter_item["id"] == 'contains':
-#                 exclude_array = filter_item.get("value", {}).get('exclude_array', [])
-#                 querys = []
-#                 for exclude in exclude_array:
-#                     exclude_value = exclude.get('value')
-#                     exclude_type = exclude.get('type', 'contain')
-#                     exclude_regex = regex_patterns.get(exclude_type, regex_patterns['contain'])(exclude_value)
-#                     querys.append({"url": {"$regex": exclude_regex}})
-#                 excluded_users = collection.find({"$or": querys})
-#                 user_ids_to_exclude.update(user.get('fullName') for user in excluded_users)
-
-#         SEGMENT_COLLECTION.update_one(
-#             {'_id': segment_id},
-#             {'$set': {'excluded_users': list(user_ids_to_exclude)}}
-#         )
-#     else:
-#         print("Segment not found or an error occurred.")
-
-    # date_range_query = build_date_query(start_date, end_date)
-
-    # else:
-    #     base_query = {
-    #         '$and': [date_range_query, filter_query]
-    #     }
-
-    #     if excluded_users:
-    #         base_query['fullName'] = {"$nin": excluded_users}
-    #     else:
-    #         if is_segnew:
-    #             filters = filters[1]
-    #         if filters:
-    #             try:
-    #                 user_ids_to_exclude = set()
-    #                 # Compile regex patterns for different types outside the loop
-    #                 regex_patterns = {
-    #                     'contain': (lambda value: re.compile(re.escape(value), re.IGNORECASE)),
-    #                     'start': (lambda value: re.compile(f"^{re.escape(value)}", re.IGNORECASE)),
-    #                     'end': (lambda value: re.compile(f"{re.escape(value)}$", re.IGNORECASE)),
-    #                 }
-
-    #                 user_ids_to_exclude = set()
-
-    #                 for filter in filters:
-    #                     if filter["id"] == 'contains':
-    #                         querys = []
-    #                         exclude_array = filter["value"].get('exclude_array', [])
-    #                         for exclude in exclude_array:
-    #                             exclude_value = exclude['value']
-    #                             exclude_type = exclude['type'] or 'contain'
-    #                             exclude_regex = regex_patterns.get(exclude_type, regex_patterns['contain'])(exclude_value)
-    #                             querys.append({"url": {"$regex": exclude_regex}})
-    #                         excluded_users = collection.find({"$or": querys})
-    #                         user_ids_to_exclude.update(user['fullName'] for user in excluded_users)
-
-    #                 if user_ids_to_exclude:
-    #                     base_query['fullName'] = {"$nin": list(user_ids_to_exclude)}
-    #             except KeyError:
-    #                 pass
-
-    # instance = collection.find(base_query).skip(skip).limit(ITEMS_PER_PAGE)
-
-    # # Apply sorting if provided
-    # if sorting:
-    #     # Add sorting logic based on the sorting parameter
-    #     for option in sorting:
-    #         if option["desc"] == "False":
-    #             instance = instance.sort([(option["id"], 1)])
-    #         elif option["desc"] == "True":
-    #             instance = instance.sort([(option["id"], -1)])
-
-    # if user_ids_to_exclude:
-    #     response_data = {
-    #         'users': json.loads(json_util.dumps(list(instance))),
-    #         'excluded_users': list(user_ids_to_exclude)
-    #     }
-    # else:
-    #     response_data = {
-    #         'users': json.loads(json_util.dumps(list(instance)))
-    #     }
-
-    # return jsonify(response_data)
