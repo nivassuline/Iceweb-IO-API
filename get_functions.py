@@ -271,7 +271,6 @@ def get_by_precent_count(ENGINE, table_name, field, date_range_query, filter_que
             result = connection.execute(query)
 
             for row in result:
-                print(f'row  {row}')
                 if row[0] == '-' or 'Unknown' in row[0]:
                     pass
                 else:
@@ -340,7 +339,10 @@ def get_average(ENGINE, value, company_id, date_range_query,filter_query=None):
 
                 result = connection.execute(query).scalar()
 
-                return round(result, 1)
+                try:
+                    return round(result, 1)
+                except TypeError:
+                    return 0
             if value == 'net_worth':
                 query = text(f"""
                     SELECT AVG(
@@ -481,7 +483,10 @@ def get_average(ENGINE, value, company_id, date_range_query,filter_query=None):
 
                 result = connection.execute(query).scalar()
 
-                return round(result, 1)
+                try:
+                    return round(result, 1)
+                except TypeError:
+                    return 0
             if value == 'net_worth':
                 query = text(f"""
                     SELECT AVG(
