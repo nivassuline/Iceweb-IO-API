@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import jwt
 from integrations import *
 import re
-
+from datetime import datetime
 
 def camel_to_snake(column_name):
         result = [column_name[0].lower()]
@@ -121,10 +121,14 @@ def calculate_percentage_change(original_value, new_value):
     return f"{percentage_change:.2f}%"
 
 def add_log(collection,endpoint,request_data,response,user_id=None,company_id=None,segment_id=None):
+        now = datetime.now()
+        dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
+
         log = {
             "endpoint" : endpoint,
             "request_data" : request_data,
             "response" : response,
+            "date_time": dt_string
         }
         if user_id:
             log["user_id"] = user_id

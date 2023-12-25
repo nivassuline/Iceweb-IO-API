@@ -11,6 +11,15 @@ def upload_to_azure_blob(blob_service_client, container_name, content, blob_name
 
     blob_client.upload_blob(content, overwrite=True)
 
+
+
+def upload_profile_picture_blob(AZURE_ACCOUNT_URL,AZURE_CONNECTION_BLOB_STRING,AZURE_CONTAINER_NAME,image,user_id):
+    blob_service_client = BlobServiceClient(account_url=AZURE_ACCOUNT_URL, credential=AZURE_CONNECTION_BLOB_STRING)
+    blob_name = f'profile_images/{user_id}.png'
+    upload_to_azure_blob(blob_service_client, AZURE_CONTAINER_NAME, io.BytesIO(image.read()), blob_name)
+
+
+
 def delete_from_azure_blob(AZURE_ACCOUNT_URL,AZURE_CONNECTION_BLOB_STRING,container_name,company_id, blob_name):
     blob_service_client = BlobServiceClient(account_url=AZURE_ACCOUNT_URL, credential=AZURE_CONNECTION_BLOB_STRING)
     container_client = blob_service_client.get_container_client(container_name)
