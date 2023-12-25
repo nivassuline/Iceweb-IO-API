@@ -1666,18 +1666,7 @@ def internal_error(error):
 
     # # Apply sorting if provided
     # if sorting:
-    #     # Add sorting logic based on the sorting parameter
-    #     for option in sorting:
-    #         if option["desc"] == "False":
-    #             instance = instance.sort([(option["id"], 1)])
-    #         elif option["desc"] == "True":
-    #             instance = instance.sort([(option["id"], -1)])
-
-    # if user_ids_to_exclude:
-    #     response_data = {
-    #         'users': json.loads(json_util.dumps(list(instance))),
-    #         'excluded_users': list(user_ids_to_exclude)
-    #     }
+    #     # 
     # else:
     #     response_data = {
     #         'users': json.loads(json_util.dumps(list(instance)))
