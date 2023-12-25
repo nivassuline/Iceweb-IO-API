@@ -1,5 +1,5 @@
 from datetime import datetime
-from flask import Flask, request, jsonify, make_response
+from flask import Flask, request, jsonify, make_response, send_file
 from flask_bcrypt import Bcrypt
 from urllib.parse import urlparse
 from pymongo import MongoClient
@@ -368,11 +368,10 @@ def add_segment():
         return jsonify({"error": "Invalid token"}), 401
 
 
-@app.route("/api/delete-user", methods=['POST'])
+@app.route("/api/delete-user", methods=['DELETE'])
 def delete_user():
-    data = request.get_json()
+    user_id = request.args.get('user_id')
 
-    user_id = data.get('user_id')
     user = USER_COLLECTION.find_one({'_id': user_id})
     USER_COLLECTION.delete_one({'_id': user_id})
     COMPANIES_COLLECTION.update_many({'attached_users': {'$regex': user['user_email']}}, {
@@ -381,11 +380,11 @@ def delete_user():
     return jsonify('done!')
 
 
-@app.route("/api/delete-integration", methods=['POST'])
+@app.route("/api/delete-integration", methods=['DELETE'])
 def delete_integration():
-    data = request.get_json()
-    integration_id = data.get('integration_id')
-    segment_id = data.get('segment_id')
+    integration_id = request.args.get('integration_id')
+    segment_id = request.args.get('segment_id')
+
 
     if segment_id:
         SEGMENT_COLLECTION.update_one(
@@ -400,11 +399,9 @@ def delete_integration():
     return jsonify('done!')
 
 
-@app.route("/api/delete-company", methods=['POST'])
+@app.route("/api/delete-company", methods=['DELETE'])
 def delete_company():
-    data = request.get_json()
-
-    company_id = data.get('company_id')
+    company_id = request.args.get('company_id')
 
     COMPANIES_COLLECTION.delete_one({'_id': company_id})
     USER_COLLECTION.update_many({'companies': {'$regex': company_id}}, {
@@ -415,11 +412,9 @@ def delete_company():
     return jsonify("done!")
 
 
-@app.route("/api/delete-segment", methods=['POST'])
+@app.route("/api/delete-segment", methods=['DELETE'])
 def delete_segment():
-    data = request.get_json()
-
-    segment_id = data.get('segment_id')
+    segment_id = request.args.get('segment_id')
 
     segment = SEGMENT_COLLECTION.find_one_and_delete({'_id': segment_id})
 
@@ -456,7 +451,7 @@ def import_data():
     return jsonify('Done!')
 
 
-@app.route("/api/get-company-list", methods=['POST'])
+@app.route("/api/get-company-list", methods=['GET'])
 def get_company_list():
     companies = []
     token = request.headers.get('Authorization')
@@ -497,7 +492,7 @@ def get_company_list():
         return jsonify({"error": "Invalid token"}), 401
 
 
-@app.route("/api/get-user-list", methods=['POST'])
+@app.route("/api/get-user-list", methods=['GET'])
 def get_user_list():
     users_lst = []
     token = request.headers.get('Authorization')
@@ -708,9 +703,6 @@ def get_user_journey():
     data = request.get_json()
     company_id = data.get('id').lower()
     user_name = data.get('user_name')
-    start_date = data.get('start-date')
-    end_date = data.get('end-date')
-    filters = data.get('filters')
 
     query = text(f"""
         SELECT 
@@ -1440,6 +1432,49 @@ def test_integration():
         return jsonify({"error": "Invalid token"}), 401
 
 
+@app.route("/api/get-profile-picture", methods=['GET'])
+def get_profile_picture():
+    token = request.headers.get('Authorization')
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        user_id = payload['user_id']
+
+                # Assuming image file name is based on user_id
+        image_path = f"companies/profile_images/{user_id}.png"
+
+        return send_file(image_path, mimetype='image/png')
+    
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Token has expired"}), 401
+    except jwt.DecodeError as e:
+        return jsonify({"error": "Invalid token"}), 401
+    
+
+
+@app.route("/api/upload-profile-picture", methods=['POST'])
+def upload_profile_picture():
+    token = request.headers.get('Authorization')
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        user_id = payload['user_id']
+
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file part'})
+
+        file = request.files['file']
+
+        if file.filename == '':
+            return jsonify({'error': 'No selected file'})
+
+        upload_profile_picture_blob(AZURE_ACCOUNT_URL,AZURE_CONNECTION_BLOB_STRING,AZURE_CONTAINER_NAME,file,user_id)
+
+        return jsonify({'message': 'File uploaded successfully'})
+    
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Token has expired"}), 401
+    except jwt.DecodeError as e:
+        return jsonify({"error": "Invalid token"}), 401
+
 @app.route("/api/download-users", methods=['POST'])
 def download_users():
     data = request.get_json()
@@ -1484,3 +1519,168 @@ def internal_error(error):
     print(error)
 
     return jsonify("Not Found")
+
+# @app.route("/api/add-data", methods=['POST'])
+# def add_data():
+#     company_id = request.args.get('id')
+#     company_collection = DB_CLIENT[f'{company_id}_data']
+
+#     df = pd.read_csv(
+#         '/Users/neevassouline/Desktop/Coding Projects/IcewebIO/backend/people_data_20.csv')
+#     df.fillna('-', inplace=True)
+
+#     df[['date', 'hour']] = df['date'].str.split(' ', expand=True)
+#     df[['hour']] = df['hour'].str.split('+', expand=True)[[0]]
+#     df['full_name'] = df['firstName'] + ' ' + df['lastName']
+
+#     list_of_lists = df.to_dict(orient='records')
+#     company_collection.insert_many(list_of_lists)
+
+#     return jsonify('Done!')
+
+
+# from google.auth.transport.requests import Request
+# from google.auth.credentials import AnonymousCredentials
+# from google.auth.transport.requests import Request
+# from google.auth import jwt
+# from google.ads.googleads.client import GoogleAdsClient
+
+# @app.route("/api/auth/google", methods=['POST'])
+# def auth_google():
+#     code = request.json.get('code')
+#     client_id = '852749625849-0711o5c0mn6elckm3cqllf546am5u58d.apps.googleusercontent.com'
+#     client_secret = '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'
+#     redirect_uri = 'http://localhost:3000'
+#     grant_type = 'authorization_code'
+
+#     token_url = 'https://oauth2.googleapis.com/token'
+#     headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+#     data = {
+#         'code': code,
+#         'client_id': client_id,
+#         'client_secret': client_secret,
+#         'redirect_uri': redirect_uri,
+#         'grant_type': grant_type,
+#     }
+
+#     try:
+#         response = requests.post(token_url, headers=headers, data=data)
+#         response.raise_for_status()
+#         tokens = response.json()
+
+
+#         credentials = {
+#                 "developer_token": "A37QyGuX6bLSUzyCMrfvbA",
+#                 "refresh_token": tokens['refresh_token'],
+#                 "client_id": client_id,
+#                 "client_secret": client_secret,
+#                 "use_proto_plus": False}
+
+#         print(credentials)
+#         client = GoogleAdsClient.load_from_dict(credentials)
+#         # Send the tokens back to the frontend, or store them securely and create a session
+
+#         create_customer_match_user_list(client, '2315440060')
+#         return jsonify(tokens)
+#     except requests.exceptions.RequestException as e:
+#         # Handle errors in the token exchange
+#         print('Token exchange error:', e)
+#         return jsonify({'error': 'Internal Server Error'})
+
+# def update_excluded_users(segment_id):
+#     segment = SEGMENT_COLLECTION.find_one({'_id': segment_id})
+#     if segment:
+#         filters = segment['filters']
+#         company_id = segment['attached_company']
+#         collection = DB_CLIENT[f'{company_id}_data']
+#         user_ids_to_exclude = set()
+
+#         # Compile regex patterns for different types outside the loop
+#         regex_patterns = {
+#             'contain': (lambda value: re.compile(re.escape(value), re.IGNORECASE)),
+#             'start': (lambda value: re.compile(f"^{re.escape(value)}", re.IGNORECASE)),
+#             'end': (lambda value: re.compile(f"{re.escape(value)}$", re.IGNORECASE)),
+#         }
+
+#         for filter_item in filters:
+#             if filter_item["id"] == 'contains':
+#                 exclude_array = filter_item.get("value", {}).get('exclude_array', [])
+#                 querys = []
+#                 for exclude in exclude_array:
+#                     exclude_value = exclude.get('value')
+#                     exclude_type = exclude.get('type', 'contain')
+#                     exclude_regex = regex_patterns.get(exclude_type, regex_patterns['contain'])(exclude_value)
+#                     querys.append({"url": {"$regex": exclude_regex}})
+#                 excluded_users = collection.find({"$or": querys})
+#                 user_ids_to_exclude.update(user.get('fullName') for user in excluded_users)
+
+#         SEGMENT_COLLECTION.update_one(
+#             {'_id': segment_id},
+#             {'$set': {'excluded_users': list(user_ids_to_exclude)}}
+#         )
+#     else:
+#         print("Segment not found or an error occurred.")
+
+    # date_range_query = build_date_query(start_date, end_date)
+
+    # else:
+    #     base_query = {
+    #         '$and': [date_range_query, filter_query]
+    #     }
+
+    #     if excluded_users:
+    #         base_query['fullName'] = {"$nin": excluded_users}
+    #     else:
+    #         if is_segnew:
+    #             filters = filters[1]
+    #         if filters:
+    #             try:
+    #                 user_ids_to_exclude = set()
+    #                 # Compile regex patterns for different types outside the loop
+    #                 regex_patterns = {
+    #                     'contain': (lambda value: re.compile(re.escape(value), re.IGNORECASE)),
+    #                     'start': (lambda value: re.compile(f"^{re.escape(value)}", re.IGNORECASE)),
+    #                     'end': (lambda value: re.compile(f"{re.escape(value)}$", re.IGNORECASE)),
+    #                 }
+
+    #                 user_ids_to_exclude = set()
+
+    #                 for filter in filters:
+    #                     if filter["id"] == 'contains':
+    #                         querys = []
+    #                         exclude_array = filter["value"].get('exclude_array', [])
+    #                         for exclude in exclude_array:
+    #                             exclude_value = exclude['value']
+    #                             exclude_type = exclude['type'] or 'contain'
+    #                             exclude_regex = regex_patterns.get(exclude_type, regex_patterns['contain'])(exclude_value)
+    #                             querys.append({"url": {"$regex": exclude_regex}})
+    #                         excluded_users = collection.find({"$or": querys})
+    #                         user_ids_to_exclude.update(user['fullName'] for user in excluded_users)
+
+    #                 if user_ids_to_exclude:
+    #                     base_query['fullName'] = {"$nin": list(user_ids_to_exclude)}
+    #             except KeyError:
+    #                 pass
+
+    # instance = collection.find(base_query).skip(skip).limit(ITEMS_PER_PAGE)
+
+    # # Apply sorting if provided
+    # if sorting:
+    #     # Add sorting logic based on the sorting parameter
+    #     for option in sorting:
+    #         if option["desc"] == "False":
+    #             instance = instance.sort([(option["id"], 1)])
+    #         elif option["desc"] == "True":
+    #             instance = instance.sort([(option["id"], -1)])
+
+    # if user_ids_to_exclude:
+    #     response_data = {
+    #         'users': json.loads(json_util.dumps(list(instance))),
+    #         'excluded_users': list(user_ids_to_exclude)
+    #     }
+    # else:
+    #     response_data = {
+    #         'users': json.loads(json_util.dumps(list(instance)))
+    #     }
+
+    # return jsonify(response_data)
