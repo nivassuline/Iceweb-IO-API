@@ -1440,7 +1440,7 @@ def get_profile_picture():
         user_id = payload['user_id']
 
                 # Assuming image file name is based on user_id
-        image_path = f"companies/profile_images/{user_id}.png"
+        image_path = f"/companies/profile_images/{user_id}.png"
 
         return send_file(image_path, mimetype='image/png')
     
