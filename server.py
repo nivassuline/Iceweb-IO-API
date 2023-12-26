@@ -1441,7 +1441,7 @@ def get_profile_picture():
 
                 # Assuming image file name is based on user_id
         image_path = f"/companies/profile_images/{user_id}.png"
-
+        
         return send_file(image_path, mimetype='image/png')
     
     except jwt.ExpiredSignatureError:
@@ -1512,6 +1512,77 @@ def download_users():
 
     return response
 
+@app.route("/api/generate-api-key", methods=['GET'])
+def generate_user_api_key():
+    token = request.headers.get('Authorization')
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        user_id = payload['user_id']
+        
+        api_key = generate_api_key()
+
+        USER_COLLECTION.update_one({"_id" : user_id}, {"$set" : {
+            "api_key" : api_key
+        }})
+
+        return jsonify(api_key)
+
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Token has expired"}), 401
+    except jwt.DecodeError as e:
+        return jsonify({"error": "Invalid token"}), 401
+    
+@app.route("/api/get-api-key", methods=['GET'])
+def get_user_api_key():
+    token = request.headers.get('Authorization')
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        user_id = payload['user_id']
+
+        user = USER_COLLECTION.find_one({"_id" : user_id})
+        if user["api_key"]:
+            api_key = user["api_key"]
+        else:
+            api_key = 'No API Key Yet'
+
+        return jsonify(api_key)
+
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Token has expired"}), 401
+    except jwt.DecodeError as e:
+        return jsonify({"error": "Invalid token"}), 401
+
+
+
+
+########################################################################################
+# FROM HERE ALL ENDPOINTS ARE FOR EXTERNAL USERS TO USE OUR API FOR DATA
+########################################################################################
+
+
+@app.route("/iceapi/get-user-data", methods=['POST'])
+def get_user_data():
+    token = request.headers.get('Authorization')
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        user_id = payload['user_id']
+        user_role = payload['user_role']
+        api_key = generate_jwt_token(user_id, user_role,SECRET_KEY, api_key=True)
+
+        return jsonify(api_key)
+
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Token has expired"}), 401
+    except jwt.DecodeError as e:
+        return jsonify({"error": "Invalid token"}), 401
+
+
+
+
+
+
+
+
 
 @app.errorhandler(500)
 def internal_error(error):
@@ -1519,6 +1590,9 @@ def internal_error(error):
     print(error)
 
     return jsonify("Not Found")
+
+
+
 
 # @app.route("/api/add-data", methods=['POST'])
 # def add_data():
@@ -1666,7 +1740,18 @@ def internal_error(error):
 
     # # Apply sorting if provided
     # if sorting:
-    #     # 
+    #     # Add sorting logic based on the sorting parameter
+    #     for option in sorting:
+    #         if option["desc"] == "False":
+    #             instance = instance.sort([(option["id"], 1)])
+    #         elif option["desc"] == "True":
+    #             instance = instance.sort([(option["id"], -1)])
+
+    # if user_ids_to_exclude:
+    #     response_data = {
+    #         'users': json.loads(json_util.dumps(list(instance))),
+    #         'excluded_users': list(user_ids_to_exclude)
+    #     }
     # else:
     #     response_data = {
     #         'users': json.loads(json_util.dumps(list(instance)))
