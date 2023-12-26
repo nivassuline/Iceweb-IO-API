@@ -4,6 +4,7 @@ import jwt
 from integrations import *
 import re
 from datetime import datetime
+import secrets
 
 def camel_to_snake(column_name):
         result = [column_name[0].lower()]
@@ -30,13 +31,27 @@ def generate_hashed_id(row):
     return hashed_id
 
 
-def generate_jwt_token(user_id, user_role,SECRET_KEY):
+def generate_api_key():
+    new_api_key = secrets.token_urlsafe(32)
+
+    return new_api_key
+
+
+def generate_jwt_token(user_id, user_role,SECRET_KEY,api_key=None):
     # Define the payload of the token (typically contains user-related data)
-    payload = {
-        'user_id': user_id,
-        'user_role': user_role,
-        'exp': datetime.utcnow() + timedelta(hours=24)  # Token expiration time
-    }
+    if api_key is not None:
+        new_api_key = secrets.token_urlsafe(32)
+        payload = {
+            'user_id': user_id,
+            'user_role': user_role,
+            'api_key': new_api_key,
+        }
+    else:
+        payload = {
+            'user_id': user_id,
+            'user_role': user_role,
+            'exp': datetime.utcnow() + timedelta(hours=24)  # Token expiration time
+        }
 
     # Generate the JWT token
     token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
