@@ -360,6 +360,73 @@ def update_by_percent(ENGINE,company_id, COMPANIES_COLLECTION=None,SEGMENT_COLLE
         COMPANIES_COLLECTION.update_one({'_id': company_id}, {'$set': {'by_percent_chart': by_percent_chart}})
 
 
+def update_average_credit_score(ENGINE,company_id, filter_query=None,COMPANIES_COLLECTION=None,SEGMENT_COLLECTION=None,segment_id=None):
+    with ENGINE.connect() as connection:
+        if filter_query is not None:
+                query = text(f"""
+                SELECT AVG(
+                        CASE
+                            WHEN credit_range ~* 'A\. 800+' THEN 850
+                            WHEN credit_range ~* 'H\. 499 \& Less' THEN 300
+                            WHEN credit_range ~* '^[A\-\.]' THEN NULL
+                            ELSE
+                                    (
+                                        SELECT AVG(
+                                            (CAST(substring(credit_range FROM '(\d+)-(\d+)') AS NUMERIC) +
+                                            CAST(substring(credit_range FROM '(\d+)-(\d+)') AS NUMERIC)) / 2.0
+                                        )
+                                        FROM {company_id}
+                                        WHERE credit_range ~ '(\d+)-(\d+)'
+                                    )::NUMERIC
+                        END
+                    ) AS average_credit_range
+                    FROM {company_id}
+                    WHERE (credit_range !~* '^[A\-\.]' AND {filter_query});
+                    """)
+
+                result = connection.execute(query).scalar()
+
+                try:
+                    value = round(result)
+                except TypeError:
+                    value = 0
+        else:
+                query = text(f"""
+                SELECT AVG(
+                        CASE
+                            WHEN credit_range ~* 'A\. 800+' THEN 850
+                            WHEN credit_range ~* 'H\. 499 \& Less' THEN 300
+                            WHEN credit_range ~* '^[A\-\.]' THEN NULL
+                            ELSE
+                                    (
+                                        SELECT AVG(
+                                            (CAST(substring(credit_range FROM '(\d+)-(\d+)') AS NUMERIC) +
+                                            CAST(substring(credit_range FROM '(\d+)-(\d+)') AS NUMERIC)) / 2.0
+                                        )
+                                        FROM {company_id}
+                                        WHERE credit_range ~ '(\d+)-(\d+)'
+                                    )::NUMERIC
+                        END
+                    ) AS average_credit_range
+                    FROM {company_id}
+                    WHERE (credit_range !~* '^[A\-\.]');
+                    """)
+
+                result = connection.execute(query).scalar()
+
+                try:
+                    value = round(result)
+                except TypeError:
+                    value = 0
+        if segment_id:
+            SEGMENT_COLLECTION.update_one({'_id': segment_id}, {'$set': {'average_credit_score': value}})
+        else:
+            COMPANIES_COLLECTION.update_one({'_id': company_id}, {'$set': {'average_credit_score': value}})
+
+
+
+
+
 def update_integration(ENGINE,company_id,api_key,integration_name,client_secret=None,public_id=None,site_id=None,list_id=None,filter_query=None):
     # Build and execute the SQL query to select a random row
     if filter_query:
