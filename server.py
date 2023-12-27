@@ -1441,7 +1441,7 @@ def get_profile_picture():
 
                 # Assuming image file name is based on user_id
         image_path = f"/companies/profile_images/{user_id}.png"
-        
+
         return send_file(image_path, mimetype='image/png')
     
     except jwt.ExpiredSignatureError:
@@ -1560,24 +1560,69 @@ def get_user_api_key():
 ########################################################################################
 
 
+@app.route("/iceapi/get-ids", methods=['GET'])
+def get_ids():
+    api_key = request.headers.get('API_KEY')
+    user = USER_COLLECTION.find_one({"api_key" : api_key})
+    if user:
+       companies = []
+       segments = []
+       for company_id in user["companies"]:
+           company = COMPANIES_COLLECTION.find_one({"_id" : company_id})
+           companies.append({"company_id" : company_id, "company_name" : company["company_name"]})
+           segment = SEGMENT_COLLECTION.find_one({"attached_company": company_id})
+           if segment:
+               segments.append({"segment_id" : segment["_id"], "segment_name": segment["segment_name"]})
+
+       response = {
+           "companies": companies,
+           "segments" : segments
+       }
+ 
+       return jsonify(response)
+    else:
+        return jsonify('API Key Invalid'), 404
+
 @app.route("/iceapi/get-user-data", methods=['POST'])
 def get_user_data():
-    token = request.headers.get('Authorization')
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-        user_id = payload['user_id']
-        user_role = payload['user_role']
-        api_key = generate_jwt_token(user_id, user_role,SECRET_KEY, api_key=True)
+    api_key = request.headers.get('API_KEY')
+    user = USER_COLLECTION.find_one({"api_key" : api_key})
+    if user:
+        data = request.get_json()
+        company_id = data.get('company_id').lower() # Required
+        data_type = data.get('data_type') # Required
+        start_date = data.get('start_date') # Optional
+        end_date = data.get('end_date') # Optional
+        segment_id = data.get('segment_id') # Optional
 
-        return jsonify(api_key)
+        date_range_query = build_date_query(start_date, end_date)
 
-    except jwt.ExpiredSignatureError:
-        return jsonify({"error": "Token has expired"}), 401
-    except jwt.DecodeError as e:
-        return jsonify({"error": "Invalid token"}), 401
+        if segment_id:
+            segment = SEGMENT_COLLECTION.find_one({"_id" : segment_id})
+            filter_query = build_filter(company_id, segment["filters"])
+            if data_type == 'journey':
+                query = text(
+                        f"SELECT  * FROM {company_id} WHERE ({date_range_query} AND {filter_query});")
+            elif data_type == 'users':
+                query = text(
+                        f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE ({date_range_query} AND {filter_query});")
+        else:
+            if data_type == 'journey':
+                query = text(
+                        f"SELECT  * FROM {company_id} WHERE {date_range_query};")
+            elif data_type == 'users':
+                query = text(
+                        f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE {date_range_query};")
 
+        with ENGINE.connect() as connection:
+            data = connection.execute(query)
+            colum_list = data.keys()
+            result = [dict(zip(colum_list, row)) for row in data]
 
-
+        # Return data as JSON
+        return jsonify(result)
+    else:
+        return jsonify('API Key Invalid'), 404
 
 
 
