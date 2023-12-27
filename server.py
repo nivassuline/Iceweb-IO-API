@@ -14,7 +14,7 @@ import jwt
 import re
 import pandas as pd
 import psycopg2
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text,types
 import os
 from apscheduler.schedulers.background import BackgroundScheduler
 from integrations import *
@@ -111,6 +111,7 @@ def data_changed():
                          COMPANIES_COLLECTION=COMPANIES_COLLECTION)
     update_by_percent(ENGINE, company_id,
                       COMPANIES_COLLECTION=COMPANIES_COLLECTION)
+    update_average_credit_score(ENGINE,company_id,COMPANIES_COLLECTION=COMPANIES_COLLECTION)
 
     segments = SEGMENT_COLLECTION.find({'attached_company': company_id})
     for segment in segments:
@@ -132,6 +133,7 @@ def data_changed():
                              segment_id=segment['_id'], filter_query=filter_query)
         update_by_percent(ENGINE, company_id, SEGMENT_COLLECTION=SEGMENT_COLLECTION,
                           segment_id=segment['_id'], filter_query=filter_query)
+        update_average_credit_score(ENGINE,company_id,SEGMENT_COLLECTION=SEGMENT_COLLECTION,segment_id=segment["_id"],filter_query=filter_query)
     for user in USER_COLLECTION.find({'companies': company_id}):
         if user["integrations"]:
             for integration in user["integrations"]:
@@ -430,7 +432,7 @@ def delete_segment():
 def import_data():
     company_id = request.args.get('id')
     print(company_id)
-    path = '/Users/neevassouline/Desktop/Coding Projects/IcewebIO/backend/data.csv'
+    path = '/Users/neevassouline/Desktop/Coding Projects/IcewebIO/data1.csv'
 
     df = pd.read_csv(path)
     df.fillna('-', inplace=True)
@@ -443,6 +445,7 @@ def import_data():
     df['full_name'] = df['firstName'] + ' ' + df['lastName']
     df['url'] = df['url'].apply(lambda x: x.replace(
         f'{urlparse(x).scheme}://{urlparse(x).netloc}', ''))
+    
 
     df_filtered = df[desired_columns_order_journey]
     df_filtered = df_filtered.rename(columns=lambda x: camel_to_snake(x))
@@ -450,6 +453,62 @@ def import_data():
 
     return jsonify('Done!')
 
+@app.route("/api/import-pearldiver", methods=['POST'])
+def import_pearldiver():
+    company_id = request.args.get('id')
+    print(company_id)
+    path = '/Users/neevassouline/Desktop/Coding Projects/IcewebIO/data.csv'
+
+    mapping = {
+    'LastActivityDate': 'date',
+    'FirstName': 'firstName',
+    'LastName': 'lastName',
+    'Email': 'email',
+    'Gender': 'gender',
+    'AgeRange': 'age',
+    'LinkedIn': 'linkedIn',
+    'PersonalCity': 'city',
+    'PersonalState': 'state',
+    'PersonalZIP': 'zip',
+    'MobilePhone1': 'phone'
+    # Add more mappings as needed
+}
+
+    df = pd.read_csv(path)
+
+    df = df[list(mapping.keys())].rename(columns=mapping)
+
+    df['hour'] = "00:00:00"  # Add default value or update based on your data
+    df['url'] = "/"   # Add default value or update based on your data
+    df['bebacks'] = 0
+
+    for column in desired_columns_order_journey:
+        if column not in ['hour', 'url','date', 'firstName','lastName', 'email','gender','age','linkedIn','city','state','zip','phone','bebacks']:
+            df[column] = '-'
+
+    df['date_added'] = datetime.now().date()
+    df['full_name'] = df['firstName'] + ' ' + df['lastName']
+    df['full_name'] = df['full_name'].fillna(df['email'].str.split('@').str[0])
+    df['firstName'] = df['firstName'].fillna(df['email'].str.split('@').str[0])
+    df['zip'] = df['zip'].fillna(0)
+    # df['zip'] = pd.to_numeric(df['zip'])
+    df['gender'] = df['gender'].replace({'M': 'Male', 'F': 'Female', 'U' : '-'})
+    df['age'] = df['age'].replace({'18-24': '20', '25-34': '30', '35-44': '40', '45-54': '50', '55-64': '60', '65 and older': '70'})
+
+
+    df.fillna('-', inplace=True)
+
+    df_filtered = df[desired_columns_order_journey]
+    df_filtered = df_filtered.rename(columns=lambda x: camel_to_snake(x))
+
+
+    # column_data_types = {col: types.String() for col in df_filtered.columns}
+    # column_data_types.update({col: types.BigInteger() for col in ['bebacks', 'zip']})
+
+
+
+    df_filtered.to_sql(company_id, ENGINE, if_exists='append', index=False)
+    return jsonify('Done!')
 
 @app.route("/api/get-company-list", methods=['GET'])
 def get_company_list():
@@ -576,6 +635,78 @@ def get_segment_list():
         print(e)
         return jsonify({"error": "Invalid token"}), 401
 
+def get_total_rows(query):
+    count_query = text(f"SELECT COUNT(*) FROM ({query}) as subquery")
+    with ENGINE.connect() as connection:
+        total_rows = connection.execute(count_query).scalar()
+    return total_rows
+
+
+@app.route("/api/get-data-rows-count", methods=['POST'])
+def get_data_rows_count():
+    data = request.get_json()
+    company_id = data.get('id').lower()
+    start_date = data.get('start-date')
+    end_date = data.get('end-date')
+    page = data.get('page')
+    column_filters = data.get('column_filter')
+    filters = data.get('filters')
+    data_type = data.get('data_type')
+
+    try:
+        if len(filters) > 0:
+            filter_query = build_filter(company_id, filters, column_filters)
+
+        elif len(filters) == 0:
+            return jsonify('ignore')
+    except TypeError:
+        try:
+            if filters[0] == 'segnew':
+                filter_query = build_filter(
+                    company_id, filter_params=filters[1])
+        except IndexError:
+            filter_query = build_filter(
+                company_id, filter_params=None, column_filters=column_filters)
+        except TypeError:
+            filter_query = build_filter(
+                company_id, filter_params=None, column_filters=column_filters)
+
+    skip = page * ITEMS_PER_PAGE
+
+    print(filter_query)
+
+    date_range_query = build_date_query(start_date, end_date)
+
+    if filter_query is None:
+        if data_type == 'users':
+            query = text(
+                f"SELECT COUNT(DISTINCT full_name) FROM public.{company_id} WHERE ({date_range_query});")  
+        else:
+            query = text(
+                f"SELECT COUNT(*) FROM {company_id} WHERE ({date_range_query});")
+
+    else:
+        if data_type == 'users':
+            # Final query
+            query = text(f"""
+                SELECT COUNT(DISTINCT full_name)
+                FROM public.{company_id}
+                WHERE ({date_range_query} AND {filter_query})
+            """)
+        else:
+            query = text(f"""
+                SELECT COUNT(*)
+                FROM public.{company_id}
+                WHERE ({date_range_query} AND {filter_query})
+            """)
+
+
+    with ENGINE.connect() as connection:
+        total_rows = connection.execute(query).scalar()
+        
+    # Return data as JSON
+    return jsonify(total_rows)
+
 
 @app.route("/api/get-data", methods=['POST'])
 def get_data():
@@ -614,59 +745,29 @@ def get_data():
     date_range_query = build_date_query(start_date, end_date)
 
     if filter_query is None:
-        if full_data:
-            if data_type == 'users':
-                query = text(
-                    f"SELECT DISTINCT ON (full_name) full_name, email, maid, maid_os FROM {company_id} WHERE {date_range_query};")
-
-                with ENGINE.connect() as connection:
-                    data = connection.execute(query)
-                    result = [dict(list(zip(['index', 'full_name', 'email', 'maid', 'maid_os'], [
-                                   index + 1] + list(row)))) for index, row in enumerate(data)]
-
-                return jsonify(result)
-            else:
-                query = text(
-                    f"SELECT  * FROM {company_id} WHERE {date_range_query};")
+        if data_type == 'users':
+            query = text(
+                f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE ({date_range_query}) LIMIT {ITEMS_PER_PAGE} OFFSET {skip};")
         else:
-            if data_type == 'users':
-                query = text(
-                    f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE ({date_range_query}) LIMIT {ITEMS_PER_PAGE} OFFSET {skip};")
-            else:
-                query = text(
-                    f"SELECT  * FROM {company_id} WHERE ({date_range_query}) LIMIT {ITEMS_PER_PAGE} OFFSET {skip};")
+            query = text(
+                f"SELECT  * FROM {company_id} WHERE ({date_range_query}) LIMIT {ITEMS_PER_PAGE} OFFSET {skip};")
 
     else:
-        if full_data:
-            if data_type == 'users':
-                # Final query
-                query = text(f"""
-                    SELECT DISTINCT ON (full_name) *
-                    FROM public.{company_id}
-                    WHERE ({date_range_query} AND {filter_query})
-                """)
-            else:
-                query = text(f"""
-                    SELECT *
-                    FROM public.{company_id}
-                    WHERE ({date_range_query} AND {filter_query})
-                """)
+        if data_type == 'users':
+            # Final query
+            query = text(f"""
+                SELECT DISTINCT ON (full_name) *
+                FROM public.{company_id}
+                WHERE ({date_range_query} AND {filter_query})
+                LIMIT {ITEMS_PER_PAGE} OFFSET {skip}
+            """)
         else:
-            if data_type == 'users':
-                # Final query
-                query = text(f"""
-                    SELECT DISTINCT ON (full_name) *
-                    FROM public.{company_id}
-                    WHERE ({date_range_query} AND {filter_query})
-                    LIMIT {ITEMS_PER_PAGE} OFFSET {skip}
-                """)
-            else:
-                query = text(f"""
-                    SELECT *
-                    FROM public.{company_id}
-                    WHERE ({date_range_query} AND {filter_query})
-                    LIMIT {ITEMS_PER_PAGE} OFFSET {skip}
-                """)
+            query = text(f"""
+                SELECT *
+                FROM public.{company_id}
+                WHERE ({date_range_query} AND {filter_query})
+                LIMIT {ITEMS_PER_PAGE} OFFSET {skip}
+            """)
 
 
     with ENGINE.connect() as connection:
@@ -854,6 +955,39 @@ def get_by_precent_counts():
     except jwt.DecodeError as e:
         print(e)
         return jsonify({"error": "Invalid token"}), 401
+
+
+@app.route("/api/get-average", methods=['POST'])
+def get_average_app():
+    company_id = request.json.get('company_id')
+    segment_id = request.json.get('segment_id')
+    average_type = request.json.get('average_type')
+    filters = request.json.get('filters')
+    start_date = request.json.get('start_date')
+    end_date = request.json.get('end_date')
+
+    filters_query = build_filter(company_id,filters)
+    date_query = build_date_query(start_date,end_date)
+
+    try:
+        if any([start_date == 'undefined', start_date == None]):
+            if segment_id:
+                company = SEGMENT_COLLECTION.find_one({'_id': segment_id})
+            else:
+                company = COMPANIES_COLLECTION.find_one(
+                    {'_id': company_id})
+            value = company["average_credit_score"]
+
+        else:
+            value = get_average(ENGINE,average_type,company_id,date_query,filters_query)
+
+    except KeyError:
+            value = 0
+
+    return jsonify(value)
+
+
+
 
 
 @app.route("/api/get-company-popular", methods=['POST'])
@@ -1635,7 +1769,6 @@ def internal_error(error):
     print(error)
 
     return jsonify("Not Found")
-
 
 
 
