@@ -219,7 +219,7 @@ from customerio import CustomerIO, Regions
 import phonenumbers
 import mailchimp_marketing as MailchimpMarketing
 from mailchimp_marketing.api_client import ApiClientError
-from datetime import datetime, timedelta
+import datetime
 # from google.auth.transport.requests import Request
 # from google.auth.credentials import AnonymousCredentials
 # from google.auth.transport.requests import Request
@@ -376,17 +376,17 @@ def get_birthdate_from_age(age):
         age = int(float(age))
 
         # Get the current year
-        current_year = datetime.now().year
+        current_year = datetime.datetime.now().year
 
         # Calculate the birth year
         birth_year = current_year - age
 
         # Assuming a birthdate on January 1st of the birth year
-        birthdate = datetime(birth_year, 1, 1)
+        birthdate = datetime.datetime(birth_year, 1, 1)
 
         return birthdate.strftime('%Y-%m-%d')
     except Exception:
-        birthdate = datetime(1900, 1, 1)
+        birthdate = datetime.datetime(1900, 1, 1)
         return birthdate.strftime('%Y-%m-%d')
     
 
@@ -408,7 +408,7 @@ def bayengage_integration(client_secret,public_id,data,list_id=None):
         "email": data["email"],
         "source": "api",
         "email_subscription": "active",
-        "custom_fields": [{key:value} for key, value in data.items()],
+        "custom_fields": [{key: value.isoformat() if isinstance(value, datetime.date) else value} for key, value in data.items()],
         "first_name": data["first_name"],
         "last_name": data["last_name"],
         "address1": data["address"],
@@ -419,6 +419,8 @@ def bayengage_integration(client_secret,public_id,data,list_id=None):
         }
     ]
     }
+
+    print(subs)
 
     if list_id:
         subs["subscribers"][0]["list_id"] = list_id
