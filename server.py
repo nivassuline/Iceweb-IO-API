@@ -307,7 +307,7 @@ def add_integration():
         # update_integration(company_id,api_key,integration_name,site_id,list_id)
 
         job = scheduler.add_job(func=update_integration, misfire_grace_time=15*60,
-                                args=[company_id, api_key, integration_name, site_id, list_id, filter_query])
+                                args=[ENGINE,company_id, api_key, integration_name, site_id, list_id, filter_query])
 
         job.modify(next_run_time=datetime.now())
 
@@ -489,7 +489,6 @@ def import_pearldiver():
     df['date_added'] = datetime.now().date()
     df['full_name'] = df['firstName'] + ' ' + df['lastName']
     df['full_name'] = df['full_name'].fillna(df['email'].str.split('@').str[0])
-    df['firstName'] = df['firstName'].fillna(df['email'].str.split('@').str[0])
     df['zip'] = df['zip'].fillna(0)
     # df['zip'] = pd.to_numeric(df['zip'])
     df['gender'] = df['gender'].replace({'M': 'Male', 'F': 'Female', 'U' : '-'})
@@ -1769,8 +1768,6 @@ def internal_error(error):
     print(error)
 
     return jsonify("Not Found")
-
-
 
 # @app.route("/api/add-data", methods=['POST'])
 # def add_data():
