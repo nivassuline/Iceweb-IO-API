@@ -220,6 +220,8 @@ import phonenumbers
 import mailchimp_marketing as MailchimpMarketing
 from mailchimp_marketing.api_client import ApiClientError
 import datetime
+import json
+
 # from google.auth.transport.requests import Request
 # from google.auth.credentials import AnonymousCredentials
 # from google.auth.transport.requests import Request
@@ -401,6 +403,7 @@ def bayengage_integration(client_secret,public_id,data,list_id=None):
         "Content-Type": "application/json",
     }
 
+    custom_fields = [{key: str(int(value)) if isinstance(value, float) else value.isoformat() if isinstance(value, datetime.date) else value} for key, value in data.items()]
 
     subs = {
     "subscribers": [
@@ -408,7 +411,7 @@ def bayengage_integration(client_secret,public_id,data,list_id=None):
         "email": data["email"],
         "source": "api",
         "email_subscription": "active",
-        "custom_fields": [{key: value.isoformat() if isinstance(value, datetime.date) else value} for key, value in data.items()],
+        "custom_fields": custom_fields,
         "first_name": data["first_name"],
         "last_name": data["last_name"],
         "address1": data["address"],
@@ -420,8 +423,6 @@ def bayengage_integration(client_secret,public_id,data,list_id=None):
     ]
     }
 
-    print(subs)
-
     if list_id:
         subs["subscribers"][0]["list_id"] = list_id
     
@@ -430,7 +431,10 @@ def bayengage_integration(client_secret,public_id,data,list_id=None):
     # Send the POST request
     response = requests.post(url, headers=headers, json=subs)
 
-    return response.status_code
+    respone_content = response.content
+    status_code = json.loads(respone_content.decode('utf-8'))['status']
+
+    return status_code
 
 # bayengage_integration('988925cac9ce56992deb15eb71daad63','727f10444e1a', data)
 
