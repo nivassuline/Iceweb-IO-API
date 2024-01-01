@@ -1,11 +1,11 @@
 from sqlalchemy import create_engine, text, MetaData, Table, Column, Text
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 
 def build_date_query(start_date = None, end_date = None, search=None):
     if any([start_date == 'undefined', start_date is None]):
-        start_datetime = datetime(datetime.now().year, 1, 1)
+        start_datetime = datetime(datetime.now().year, 1, 1) - timedelta(days=365 * 2)
         end_datetime = datetime.today()
     else:
         # Parse the start_date and end_date as datetime objects
