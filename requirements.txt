@@ -12,3 +12,4 @@ azure-storage-blob
 mailchimp_marketing
 phonenumbers
 customerio
+Flask-SocketIO
