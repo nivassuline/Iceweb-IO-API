@@ -430,9 +430,9 @@ def update_average_credit_score(ENGINE,company_id, filter_query=None,COMPANIES_C
 def update_integration(ENGINE,company_id,api_key,integration_name,client_secret=None,public_id=None,site_id=None,list_id=None,filter_query=None):
     # Build and execute the SQL query to select a random row
     if filter_query:
-        query = text(f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE (CAST(date_added AS DATE) = CURRENT_DATE AND {filter_query}) LIMIT 10;")
+        query = text(f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE (CAST(date_added AS DATE) = CURRENT_DATE AND {filter_query});")
     else:
-        query = text(f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE CAST(date_added AS DATE) = CURRENT_DATE LIMIT 10;")
+        query = text(f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE CAST(date_added AS DATE) = CURRENT_DATE;")
 
 
     with ENGINE.connect() as connection:

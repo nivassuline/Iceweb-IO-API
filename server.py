@@ -292,7 +292,9 @@ def add_integration():
             "site_id": site_id,
             "list_id": list_id,
             "client_secret": client_secret,
-            "public_id": public_id
+            "public_id": public_id,
+            "sync_started" : 0,
+            "sync_progress": 0,
         }
 
         if segment_id:
@@ -381,24 +383,6 @@ def delete_user():
 
     return jsonify('done!')
 
-
-@app.route("/api/delete-integration", methods=['DELETE'])
-def delete_integration():
-    integration_id = request.args.get('integration_id')
-    segment_id = request.args.get('segment_id')
-
-
-    if segment_id:
-        SEGMENT_COLLECTION.update_one(
-            {'integrations.id': integration_id},
-            {'$pull': {'integrations': {'id': integration_id}}}
-        )
-    else:
-        USER_COLLECTION.update_one(
-            {'integrations.id': integration_id},
-            {'$pull': {'integrations': {'id': integration_id}}}
-        )
-    return jsonify('done!')
 
 
 @app.route("/api/delete-company", methods=['DELETE'])
@@ -576,7 +560,6 @@ def get_user_list():
 
 @app.route("/api/get-user-integrations", methods=['POST'])
 def get_user_integrations():
-    users_lst = []
     token = request.headers.get('Authorization')
     try:
         data = request.get_json()
@@ -591,7 +574,6 @@ def get_user_integrations():
             user = USER_COLLECTION.find_one({'_id': user_id})
             return jsonify(user['integrations'])
 
-        return jsonify(users_lst), 200
     except jwt.ExpiredSignatureError:
         return jsonify({"error": "Token has expired"}), 401
     except jwt.DecodeError as e:
@@ -738,8 +720,6 @@ def get_data():
                 company_id, filter_params=None, column_filters=column_filters)
 
     skip = page * ITEMS_PER_PAGE
-
-    print(filter_query)
 
     date_range_query = build_date_query(start_date, end_date)
 
@@ -1526,9 +1506,6 @@ def test_integration():
             if integration_name == 'Klaviyo':
                 status_code = klayviyo_integration(api_key, row)  # done
             elif integration_name == 'BayEngage':
-                print(client_secret)
-                print(public_id)
-                print(list_id)
                 if client_secret and public_id:
                     status_code = bayengage_integration(
                         client_secret, public_id, row, list_id)
@@ -1564,6 +1541,122 @@ def test_integration():
     except jwt.DecodeError as e:
         return jsonify({"error": "Invalid token"}), 401
 
+
+
+@app.route("/api/get-sync-progress", methods=['POST'])
+def get_sync_progress():
+    token = request.headers.get('Authorization')
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        user_id = payload['user_id']
+        data = request.get_json()
+        segment_id = data.get('segment_id')
+        index = data.get('index')
+
+        if segment_id is None:
+            integration = USER_COLLECTION.find_one({'_id' : user_id})["integrations"][index]
+        else:
+            integration = SEGMENT_COLLECTION.find_one({'_id' : segment_id})["integrations"][index]
+
+        sync_progress = integration["sync_progress"]
+
+        if sync_progress == 0 and integration["sync_started"] == 1:
+            sync_progress = 1
+
+
+        response = {
+            'sync_started' : integration["sync_started"],
+            'sync_progress': sync_progress,
+        }
+
+
+        return jsonify(response)
+
+
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Token has expired"}), 401
+    except jwt.DecodeError as e:
+        print(e)
+        return jsonify({"error": "Invalid token"}), 401
+    
+
+@app.route("/api/stop-sync-progress", methods=['POST'])
+def stop_sync_progress():
+    token = request.headers.get('Authorization')
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        user_id = payload['user_id']
+        data = request.get_json()
+        segment_id = data.get('segment_id')
+        index = data.get('index')
+
+        if segment_id is None:
+            USER_COLLECTION.update_one({'_id' : user_id}, {'$set': {f"integrations.{index}.sync_started" : 0}})
+        else:
+            SEGMENT_COLLECTION.update_one({'_id' : segment_id}, {'$set': {f"integrations.{index}.sync_started" : 0}})
+
+
+        return jsonify('done')
+
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Token has expired"}), 401
+    except jwt.DecodeError as e:
+        print(e)
+        return jsonify({"error": "Invalid token"}), 401
+
+
+@app.route("/api/delete-integration", methods=['DELETE'])
+def delete_integration():
+    integration_id = request.args.get('integration_id')
+    segment_id = request.args.get('segment_id')
+
+
+    if segment_id:
+        SEGMENT_COLLECTION.update_one(
+            {'integrations.id': integration_id},
+            {'$pull': {'integrations': {'id': integration_id}}}
+        )
+    else:
+        USER_COLLECTION.update_one(
+            {'integrations.id': integration_id},
+            {'$pull': {'integrations': {'id': integration_id}}}
+        )
+    return jsonify('done!')
+
+    
+@app.route("/api/sync-user-integration", methods=['POST'])
+def sync_user_integration():
+    token = request.headers.get('Authorization')
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        user_id = payload['user_id']
+        data = request.get_json()
+        company_id = data.get('company_id')
+        segment_id = data.get('segment_id')
+        integration_name = data.get('integration_name')
+        api_key = data.get('api_key')
+        site_id = data.get('site_id')
+        list_id = data.get('list_id')
+        client_secret = data.get('client_secret')
+        public_id = data.get('public_id')
+        filters = data.get('filters')
+        index = data.get('index')
+
+        filter_query = build_filter(company_id,filters)
+
+        scheduler.add_job(func=sync_integration, misfire_grace_time=15*60, next_run_time=datetime.now(),
+                                args=[ENGINE,USER_COLLECTION,company_id,user_id,index,api_key,integration_name,client_secret,public_id,site_id,list_id,filter_query,segment_id,SEGMENT_COLLECTION])
+
+        return jsonify({'status': 'yes'})
+
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Token has expired"}), 401
+    except jwt.DecodeError as e:
+        print(e)
+        return jsonify({"error": "Invalid token"}), 401
+
+
+    
 
 @app.route("/api/get-profile-picture", methods=['GET'])
 def get_profile_picture():
@@ -1768,6 +1861,11 @@ def internal_error(error):
     print(error)
 
     return jsonify("Not Found")
+
+
+
+
+
 
 # @app.route("/api/add-data", methods=['POST'])
 # def add_data():

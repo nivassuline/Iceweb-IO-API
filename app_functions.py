@@ -5,6 +5,12 @@ from integrations import *
 import re
 from datetime import datetime
 import secrets
+from sqlalchemy import text
+from flask_socketio import SocketIO
+from concurrent.futures import ThreadPoolExecutor
+import concurrent.futures
+import threading
+
 
 def camel_to_snake(column_name):
         result = [column_name[0].lower()]
@@ -153,3 +159,95 @@ def add_log(collection,endpoint,request_data,response,user_id=None,company_id=No
             log["segment_id"] = segment_id
 
         collection.insert_one(log)
+
+
+def process_row(row, integration_name, segment_id,SEGMENT_COLLECTION,USER_COLLECTION,user_id,index,num_rows,api_key,client_secret,site_id,public_id,list_id,shared_data,stop_threads):
+        if shared_data["stop_threads"] == True:
+            print('stop')
+            return 'stop'
+        if segment_id is not None:
+            if SEGMENT_COLLECTION.find_one({'_id': segment_id})["integrations"][index]["sync_started"] == 0:
+                    SEGMENT_COLLECTION.find_one_and_update({'_id': segment_id}, {'$set': {f"integrations.{index}.sync_started" : 0}})
+                    SEGMENT_COLLECTION.find_one_and_update({'_id': segment_id}, {'$set': {f"integrations.{index}.sync_progress" : 0}})
+                    shared_data["stop_threads"] = True
+                    return 0
+        else:
+            if USER_COLLECTION.find_one({'_id': user_id})["integrations"][index]["sync_started"] == 0:
+                    USER_COLLECTION.find_one_and_update({'_id': user_id}, {'$set': {f"integrations.{index}.sync_started" : 0}})
+                    USER_COLLECTION.find_one_and_update({'_id': user_id}, {'$set': {f"integrations.{index}.sync_progress" : 0}})
+                    shared_data["stop_threads"] = True
+                    return 0
+        
+        #adding each row to the row num
+        with shared_data['row_num_lock']:
+            shared_data['row_num'] += 1
+            print(shared_data['row_num'])
+            percentage = int((shared_data['row_num'] / num_rows) * 100)
+            print(percentage)
+
+        if integration_name == 'Klaviyo':
+            klayviyo_integration(api_key,row) 
+        elif integration_name == 'BayEngage':
+            bayengage_integration(client_secret,public_id,row,list_id)
+        elif integration_name == 'Customer.io':
+            customerIO_integration(site_id,api_key,row) 
+        elif integration_name == 'Mailchimp':
+            mailchimp_integration(api_key,list_id,row) 
+        elif integration_name == 'SendGrid':
+            sendgrid_integration(api_key,row,[list_id]) 
+        elif integration_name == 'HubSpot':
+            hubspot_integration(api_key,row) 
+        elif integration_name == 'EmailOctopus':
+            emailoctopus_integration(api_key,list_id,row) 
+        elif integration_name == 'OmniSend':
+            omnisend_integration(api_key,row)
+        
+        if segment_id is not None:
+            SEGMENT_COLLECTION.find_one_and_update({'_id': segment_id}, {'$set': {f"integrations.{index}.sync_progress" : percentage}})
+        else:
+            USER_COLLECTION.find_one_and_update({'_id': user_id}, {'$set': {f"integrations.{index}.sync_progress" : percentage}})
+
+
+def sync_integration(ENGINE,USER_COLLECTION,company_id,user_id,index,api_key,integration_name,client_secret=None,public_id=None,site_id=None,list_id=None,filter_query=None,segment_id=None,SEGMENT_COLLECTION=None):
+    stop_threads = False
+    # Build and execute the SQL query to select a random row
+    if segment_id is not None:
+        SEGMENT_COLLECTION.find_one_and_update({'_id': segment_id}, {'$set': {f"integrations.{index}.sync_started" : 1}})
+        query = text(f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE {filter_query};")
+    else:
+        USER_COLLECTION.find_one_and_update({'_id': user_id}, {'$set': {f"integrations.{index}.sync_started" : 1}})
+        query = text(f"SELECT DISTINCT ON (full_name) * FROM {company_id}")
+    
+    shared_data = {'row_num': 0, 'row_num_lock': threading.Lock(),'stop_threads' : False}  # Shared data dictionary
+
+
+
+    with ENGINE.connect() as connection:
+        result = connection.execute(query)
+        column_names = result.keys()
+        num_rows = result.rowcount
+
+    data = [dict(zip(column_names, row)) for row in result]
+    
+
+    with ThreadPoolExecutor() as executor:
+        futures = []
+
+        for row in data:
+            future = executor.submit(process_row, row,integration_name,segment_id,SEGMENT_COLLECTION,USER_COLLECTION,user_id,index,num_rows,api_key,client_secret,site_id,public_id,list_id,shared_data,stop_threads)
+            futures.append(future)
+
+        # Wait for all threads to finish
+        concurrent.futures.wait(futures)
+
+
+    if segment_id is not None:
+        SEGMENT_COLLECTION.find_one_and_update({'_id': segment_id}, {'$set': {f"integrations.{index}.sync_started" : 0}})
+        SEGMENT_COLLECTION.find_one_and_update({'_id': segment_id}, {'$set': {f"integrations.{index}.sync_progress" : 0}})
+        return 'Done'
+    
+    else:
+        USER_COLLECTION.find_one_and_update({'_id': user_id}, {'$set': {f"integrations.{index}.sync_started" : 0}})
+        USER_COLLECTION.find_one_and_update({'_id': user_id}, {'$set': {f"integrations.{index}.sync_progress" : 0}})
+        return 'Done'
+    
