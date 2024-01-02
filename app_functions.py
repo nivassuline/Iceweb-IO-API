@@ -6,7 +6,6 @@ import re
 from datetime import datetime
 import secrets
 from sqlalchemy import text
-from flask_socketio import SocketIO
 from concurrent.futures import ThreadPoolExecutor
 import concurrent.futures
 import threading
