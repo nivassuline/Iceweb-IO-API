@@ -72,7 +72,7 @@ desired_columns_order_journey = ['date', 'date_added', 'hour', "url", "full_name
 JOURNEY_FILE_COLUMNS_ORDER = ['date', 'date_added', 'hour', 'full_name', 'url', 'facebook', 'linked_in', 'twitter', 'email', 'opt_in', 'opt_in_date', 'opt_in_ip', 'opt_in_url', 'pixel_first_hit_date', 'pixel_last_hit_date', 'bebacks', 'phone', 'dnc', 'age', 'gender', 'marital_status', 'address', 'city', 'state', 'zip', 'household_income', 'net_worth', 'income_levels', 'people_in_household', 'adults_in_household', 'children_in_household', 'veterans_in_household', 'education', 'credit_range', 'ethnic_group', 'generation', 'home_owner', 'occupation_detail', 'political_party', 'religion', 'children_between_ages0_3', 'children_between_ages4_6', 'children_between_ages7_9',
                               'children_between_ages10_12', 'children_between_ages13_18', 'behaviors', 'children_age_ranges', 'interests', 'owns_amex_card', 'owns_bank_card', 'dwelling_type', 'home_heat_type', 'home_price', 'home_purchased_years_ago', 'home_value', 'household_net_worth', 'language', 'mortgage_age', 'mortgage_amount', 'mortgage_loan_type', 'mortgage_refinance_age', 'mortgage_refinance_amount', 'mortgage_refinance_type', 'is_multilingual', 'new_credit_offered_household', 'number_of_vehicles_in_household', 'owns_investment', 'owns_premium_amex_card', 'owns_premium_card', 'owns_stocks_and_bonds', 'personality', 'is_political_contributor', 'is_voter', 'premium_income_household', 'urbanicity', 'maid', 'maid_os']
 
-USERS_FILE_COLUMNS_ORDER = ['date', 'date_added', 'full_name', 'email', 'facebook', 'linked_in', 'twitter', 'opt_in', 'opt_in_date', 'opt_in_ip', 'opt_in_url', 'pixel_first_hit_date', 'pixel_last_hit_date', 'bebacks', 'phone', 'dnc', 'age', 'gender', 'marital_status', 'address', 'city', 'state', 'zip', 'household_income', 'net_worth', 'income_levels', 'people_in_household', 'adults_in_household', 'children_in_household', 'veterans_in_household', 'education', 'credit_range', 'ethnic_group', 'generation', 'home_owner', 'occupation_detail', 'political_party', 'religion', 'children_between_ages0_3', 'children_between_ages4_6', 'children_between_ages7_9',
+USERS_FILE_COLUMNS_ORDER = ['date','first_name', 'last_name','email', 'facebook', 'linked_in', 'twitter', 'opt_in', 'opt_in_date', 'opt_in_ip', 'opt_in_url', 'pixel_first_hit_date', 'pixel_last_hit_date', 'bebacks', 'phone', 'dnc', 'age', 'gender', 'marital_status', 'address', 'city', 'state', 'zip', 'household_income', 'net_worth', 'income_levels', 'people_in_household', 'adults_in_household', 'children_in_household', 'veterans_in_household', 'education', 'credit_range', 'ethnic_group', 'generation', 'home_owner', 'occupation_detail', 'political_party', 'religion', 'children_between_ages0_3', 'children_between_ages4_6', 'children_between_ages7_9',
                             'children_between_ages10_12', 'children_between_ages13_18', 'behaviors', 'children_age_ranges', 'interests', 'owns_amex_card', 'owns_bank_card', 'dwelling_type', 'home_heat_type', 'home_price', 'home_purchased_years_ago', 'home_value', 'household_net_worth', 'language', 'mortgage_age', 'mortgage_amount', 'mortgage_loan_type', 'mortgage_refinance_age', 'mortgage_refinance_amount', 'mortgage_refinance_type', 'is_multilingual', 'new_credit_offered_household', 'number_of_vehicles_in_household', 'owns_investment', 'owns_premium_amex_card', 'owns_premium_card', 'owns_stocks_and_bonds', 'personality', 'is_political_contributor', 'is_voter', 'premium_income_household', 'urbanicity']
 
 
@@ -1781,7 +1781,7 @@ def get_user_api_key():
 
 
 
-#######################################################################################
+########################################################################################
 # FROM HERE ALL ENDPOINTS ARE FOR EXTERNAL USERS TO USE OUR API FOR DATA
 ########################################################################################
 
@@ -1863,6 +1863,8 @@ def internal_error(error):
     return jsonify("Not Found")
 
 
+# if __name__ == '__main__':
+#     app.run(port='8080')
 
 
 

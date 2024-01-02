@@ -144,8 +144,7 @@ def build_df_date_query(df, start_date, end_date, search=None):
     if start_date in ['undefined', None]:
         start_datetime_to_obj = datetime.today()
         start_datetime = start_datetime_to_obj.strftime('%Y-%m-%d')
-        end_datetime_to_obj = datetime.strptime(
-            f'{datetime.now().year}-01-01', '%Y-%m-%d')
+        end_datetime_to_obj = datetime(datetime.now().year, 1, 1) - timedelta(days=365 * 2)
         end_datetime = end_datetime_to_obj.strftime('%Y-%m-%d')
 
         # Create a boolean mask for date range query
