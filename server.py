@@ -266,7 +266,6 @@ def add_integration():
     try:
         data = request.get_json()
         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-        user_id = payload['user_id']
         company_id = data.get('company_id')
         integration_name = data.get('integration_name')
         api_key = data.get('api_key')
@@ -280,14 +279,13 @@ def add_integration():
         print(client_secret)
         print(public_id)
 
-        user = USER_COLLECTION.find_one({'_id': user_id})
+        # user = USER_COLLECTION.find_one({'_id': user_id})
 
         integration_id = uuid.uuid4().hex
 
         new_integration = {
             "id": integration_id,
             "integration_name": integration_name,
-            "attached_company": company_id,
             "api_key": api_key,
             "site_id": site_id,
             "list_id": list_id,
@@ -301,8 +299,8 @@ def add_integration():
             SEGMENT_COLLECTION.update_one(
                 {'_id': segment_id}, {'$push': {'integrations': new_integration}})
         else:
-            USER_COLLECTION.update_one(
-                {'_id': user_id}, {'$push': {'integrations': new_integration}})
+            COMPANIES_COLLECTION.update_one(
+                {'_id': company_id}, {'$push': {'integrations': new_integration}})
 
         filter_query = build_filter(company_id, filters)
 
@@ -558,21 +556,21 @@ def get_user_list():
         return jsonify({"error": "Invalid token"}), 401
 
 
-@app.route("/api/get-user-integrations", methods=['POST'])
-def get_user_integrations():
+@app.route("/api/get-company-integrations", methods=['POST'])
+def get_company_integrations():
     token = request.headers.get('Authorization')
     try:
         data = request.get_json()
         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-        user_id = payload['user_id']
+        company_id = data.get('company_id')
         segment_id = data.get('segment_id')
 
         if segment_id:
             segment = SEGMENT_COLLECTION.find_one({'_id': segment_id})
             return jsonify(segment['integrations'])
         else:
-            user = USER_COLLECTION.find_one({'_id': user_id})
-            return jsonify(user['integrations'])
+            company = COMPANIES_COLLECTION.find_one({'_id': company_id})
+            return jsonify(company['integrations'])
 
     except jwt.ExpiredSignatureError:
         return jsonify({"error": "Token has expired"}), 401
@@ -1413,63 +1411,6 @@ def update_segment():
 
 
 
-
-@app.route("/api/create-integration", methods=['POST'])
-def create_integration():
-    token = request.headers.get('Authorization')
-    try:
-        data = request.get_json()
-        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-        company_id = data.get('company_id')
-        integration_name = data.get('integration_name')
-        api_key = data.get('api_key')
-        site_id = data.get('site_id')
-        list_id = data.get('list_id')
-        code_list = []
-
-        integration_doc = INTEGRATION_COLLECTION.find_one(
-            {'name': integration_name})
-        if integration_doc:
-            # Build and execute the SQL query to select a random row
-            query = text(
-                f"SELECT DISTINCT ON (full_name) * FROM {company_id} WHERE CAST(date_added AS DATE) = CURRENT_DATE;")
-
-            with ENGINE.connect() as connection:
-                result = connection.execute(query)
-                column_names = result.keys()
-            data = [dict(zip(column_names, row)) for row in result]
-
-            print(data)
-
-            for row in data:
-                if integration_name == 'Klaviyo':
-                    status_code = klayviyo_integration(api_key, row)
-                elif integration_name == 'Customer.io':
-                    status_code = customerIO_integration(site_id, api_key, row)
-                elif integration_name == 'Mailchimp':
-                    status_code = mailchimp_integration(api_key, list_id, row)
-                elif integration_name == 'SendGrid':
-                    status_code = sendgrid_integration(api_key, row, [list_id])
-                elif integration_name == 'HubSpot':
-                    status_code = hubspot_integration(api_key, row)
-                elif integration_name == 'EmailOctopus':
-                    status_code = emailoctopus_integration(
-                        api_key, list_id, row)
-                elif integration_name == 'OmniSend':
-                    status_code = omnisend_integration(api_key, row)  # done
-                code_list.append(status_code)
-
-            print(code_list)
-            return jsonify(200)
-
-        else:
-            return jsonify(404)
-    except jwt.ExpiredSignatureError:
-        return jsonify({"error": "Token has expired"}), 401
-    except jwt.DecodeError as e:
-        return jsonify({"error": "Invalid token"}), 401
-
-
 @app.route("/api/test-integration", methods=['POST'])
 def test_integration():
     token = request.headers.get('Authorization')
@@ -1548,13 +1489,13 @@ def get_sync_progress():
     token = request.headers.get('Authorization')
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-        user_id = payload['user_id']
         data = request.get_json()
         segment_id = data.get('segment_id')
+        company_id = data.get('company_id')
         index = data.get('index')
 
         if segment_id is None:
-            integration = USER_COLLECTION.find_one({'_id' : user_id})["integrations"][index]
+            integration = COMPANIES_COLLECTION.find_one({'_id' : company_id})["integrations"][index]
         else:
             integration = SEGMENT_COLLECTION.find_one({'_id' : segment_id})["integrations"][index]
 
@@ -1585,13 +1526,13 @@ def stop_sync_progress():
     token = request.headers.get('Authorization')
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-        user_id = payload['user_id']
         data = request.get_json()
+        company_id = data.get('company_id')
         segment_id = data.get('segment_id')
         index = data.get('index')
 
         if segment_id is None:
-            USER_COLLECTION.update_one({'_id' : user_id}, {'$set': {f"integrations.{index}.sync_started" : 0}})
+            COMPANIES_COLLECTION.update_one({'_id' : company_id}, {'$set': {f"integrations.{index}.sync_started" : 0}})
         else:
             SEGMENT_COLLECTION.update_one({'_id' : segment_id}, {'$set': {f"integrations.{index}.sync_started" : 0}})
 
@@ -1609,6 +1550,7 @@ def stop_sync_progress():
 def delete_integration():
     integration_id = request.args.get('integration_id')
     segment_id = request.args.get('segment_id')
+    company_id = request.args.get('company_id')
 
 
     if segment_id:
@@ -1617,19 +1559,18 @@ def delete_integration():
             {'$pull': {'integrations': {'id': integration_id}}}
         )
     else:
-        USER_COLLECTION.update_one(
+        COMPANIES_COLLECTION.update_one(
             {'integrations.id': integration_id},
             {'$pull': {'integrations': {'id': integration_id}}}
         )
     return jsonify('done!')
 
     
-@app.route("/api/sync-user-integration", methods=['POST'])
-def sync_user_integration():
+@app.route("/api/sync-company-integration", methods=['POST'])
+def sync_company_integration():
     token = request.headers.get('Authorization')
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-        user_id = payload['user_id']
         data = request.get_json()
         company_id = data.get('company_id')
         segment_id = data.get('segment_id')
@@ -1642,10 +1583,17 @@ def sync_user_integration():
         filters = data.get('filters')
         index = data.get('index')
 
+        print(company_id)
+        print(segment_id)
+        print(integration_name)
+        print(api_key)
+        print(index)
+
+
         filter_query = build_filter(company_id,filters)
 
         scheduler.add_job(func=sync_integration, misfire_grace_time=15*60, next_run_time=datetime.now(),
-                                args=[ENGINE,USER_COLLECTION,company_id,user_id,index,api_key,integration_name,client_secret,public_id,site_id,list_id,filter_query,segment_id,SEGMENT_COLLECTION])
+                                args=[ENGINE,COMPANIES_COLLECTION,company_id,index,api_key,integration_name,client_secret,public_id,site_id,list_id,filter_query,segment_id,SEGMENT_COLLECTION])
 
         return jsonify({'status': 'yes'})
 
